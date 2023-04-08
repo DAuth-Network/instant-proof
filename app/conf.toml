@@ -1,0 +1,12 @@
+env = "dev"
+email_account = "verify@keysafe.network"
+email_password = ""
+email_server = ""
+db_host = "127.0.0.1"
+db_user = "ksadmin"
+db_password = "ks123"
+db_port = 12345
+db_name = "keysafe"
+node_api_port = 30000
+secret = "keysafe_password_for_test"
+cru_api_server = ""
