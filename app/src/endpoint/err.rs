@@ -4,53 +4,33 @@ use std::boxed::Box;
 pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub type GenericResult<T> = Result<T, GenericError>;
 
-#[derive(Clone, Debug)]
-pub struct Error {
-    kind: ErrorKind,
+pub enum DAuthError {
+    DecryptError = 1,
+    SendmailError = 2,
+    OAuthCodeError = 3,
+    OAuthProfileError = 4,
+    SessionNotFound = 5,
 }
 
-impl Error {
-    pub(crate) fn new(kind: ErrorKind) -> Error {
-        Error { kind }
+impl DAuthError {
+    pub fn to_string(self) -> String {
+        match self {
+            DAuthError::DecryptError => "DecryptError".to_string(),
+            DAuthError::SendmailError => "SendmailError".to_string(),
+            DAuthError::OAuthCodeError => "OAuthCodeError".to_string(),
+            DAuthError::OAuthProfileError => "OAuthProfileError".to_string(),
+            DAuthError::SessionNotFound => "SessionNotFound".to_string(),
+        }
     }
 
-    /// Return the kind of this error.
-    pub fn kind(&self) -> &ErrorKind {
-        &self.kind
-    }
-}
-
-/// The kind of an error that can occur.
-#[derive(Clone, Debug)]
-pub enum ErrorKind {
-    DbError(String),
-    DataError(String),
-    SessionError(String),
-    SgxError(String),
-    OauthError(String),
-}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.kind {
-            ErrorKind::DbError(msg) => write!(f, "Database error: {}", msg),
-            ErrorKind::DataError(msg) => write!(f, "Data error: {}", msg),
-            ErrorKind::SessionError(msg) => write!(f, "Session error: {}", msg),
-            ErrorKind::SgxError(msg) => write!(f, "SGX error: {}", msg),
-            ErrorKind::OauthError(msg) => write!(f, "OAuth error: {}", msg),
+    pub fn from_int(error: i32) -> Option<DAuthError>{
+        match error {
+            1 => Some(DAuthError::DecryptError),
+            2 => Some(DAuthError::SendmailError),
+            3 => Some(DAuthError::OAuthCodeError),
+            4 => Some(DAuthError::OAuthProfileError),
+            5 => Some(DAuthError::SessionNotFound),
+            _ => None,
         }
     }
 }
-
-impl std::error::Error for Error {
-    fn description(&self) -> &str {
-        match &self.kind {
-            ErrorKind::DbError(msg) => msg,
-            ErrorKind::DataError(msg) => msg,
-            ErrorKind::SessionError(msg) => msg,
-            ErrorKind::SgxError(msg) => msg,
-            ErrorKind::OauthError(msg) => msg,
-        }
-    }
-}
-

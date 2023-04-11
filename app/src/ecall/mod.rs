@@ -36,17 +36,6 @@ extern {
         value_seal_size: *mut u32
     ) -> sgx_status_t;
 
-    // when email format incorrect, return [0_u8;32]
-    pub fn ec_calc_email_hash(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8;32],
-        cipher_email: *const u8,
-        cipher_email_size: usize,
-        email_hash: &mut[u8;32]
-    ) -> sgx_status_t;
-
-
     pub fn ec_send_cipher_email(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
@@ -54,7 +43,6 @@ extern {
         cipher_email: *const u8,
         cipher_email_size: usize,
     ) -> sgx_status_t;
-
 
     pub fn ec_send_seal_email(
         eid: sgx_enclave_id_t,
@@ -64,8 +52,7 @@ extern {
         seal_email_size: usize
     ) -> sgx_status_t;
 
-
-    pub fn ec_register_email_confirm(
+    pub fn ec_confirm_email(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
         session_id: &[u8;32],
@@ -75,16 +62,6 @@ extern {
         email_seal: &mut [u8;1024],
         email_seal_size: *mut u32
     ) -> sgx_status_t;
-
-    pub fn ec_auth_email_confirm(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8;32],
-        cipher_code: *const u8,
-        cipher_code_size: usize,
-        a_hash: &mut [u8;32],
-    ) -> sgx_status_t;
-    
 
     pub fn ec_auth_oauth(
         eid: sgx_enclave_id_t,
@@ -97,7 +74,6 @@ extern {
         auth_seal: &mut [u8;1024],
         auth_seal_size: *mut u32
     ) -> sgx_status_t;
-
 
     pub fn ec_sign_auth(
         eid: sgx_enclave_id_t,
@@ -112,6 +88,7 @@ extern {
     pub fn ec_sign_auth_jwt(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
+        session_id: &[u8;32],
         auth_hash: &[u8;32],
         auth_seq: i32,
         auth_exp: u64,

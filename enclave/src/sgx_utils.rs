@@ -119,9 +119,9 @@ pub fn hash(content: &[u8]) -> GenericResult<([u8;32])> {
 pub fn decrypt(
     key: &[u8;16],
     cipher_text: &[u8]
-) -> Vec<u8> {
+) -> GenericResult<Vec<u8>> {
     info(&format!("aes_gcm_128_decrypt invoked!"));
-    let mac: &[u8;16] = &cipher_text[0..16].try_into().unwrap();
+    let mac: &[u8;16] = &cipher_text[0..16].try_into()?;
     let cipher_text_core = &cipher_text[16..];
     let mut plain_text: Vec<u8> = vec![0; cipher_text_core.len()];
     let iv: [u8;12] = [0;12];
@@ -136,11 +136,11 @@ pub fn decrypt(
         &mut plain_text);
     match result {
         Ok(_) => {
-            plain_text
+            Ok(plain_text)
         },
         Err(err) => {
             error(&format!("decrypt failed {}", err));
-            Vec::new()
+            Err(GenericError::from(err))
         }
     }
 }

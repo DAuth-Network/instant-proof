@@ -123,6 +123,7 @@ pub extern "C" fn ec_key_exchange(
     // *session_id = decode_hex(&sid).unwrap().try_into().unwrap();
     *session_id = sid.try_into().unwrap();
     if sid == [0;32] {
+        // unable to calculate share key for the given public key
         sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE
     } else {
         sgx_status_t::SGX_SUCCESS
@@ -159,10 +160,15 @@ pub extern "C" fn ec_send_cipher_email(
     let session_r = enclave_state.sessions.get_session(session_id);
     if session_r.is_none() {
         error(&format!("sgx session {:?} not found.", session_id));
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
     }
     let mut session = session_r.unwrap();
-    let email_bytes = session.decrypt(email_slice);
+    let email_bytes_r = session.decrypt(email_slice);
+    if email_bytes_r.is_err() {
+        error("decrypt email failed");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let email_bytes = email_bytes_r.unwrap();
     let email = match str::from_utf8(&email_bytes) {
         Ok(r) => {
             r
@@ -178,78 +184,17 @@ pub extern "C" fn ec_send_cipher_email(
     session.code = r.to_string();
     session.data = email.to_string();
     enclave_state.sessions.update_session(&session_id, &session);
-    os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
+    let mail_r = os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
+    if mail_r.is_err() {
+        error("send mail failed");
+        return sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE;
+    }
     sgx_status_t::SGX_SUCCESS
 }
 
 
 #[no_mangle]
-pub extern "C" fn ec_send_seal_email(
-    session_id: &[u8;32],
-    seal_email: *const u8,
-    email_size: usize,
-) -> sgx_status_t {
-    let email_slice = unsafe { slice::from_raw_parts(seal_email, email_size as usize) };
-    let mut enclave_state = singleton().inner.lock().unwrap();
-    let session_r = enclave_state.sessions.get_session(session_id);
-    if session_r.is_none() {
-        error(&format!("sgx session {:?} not found.", session_id));
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let mut session = session_r.unwrap();
-    //let email_bytes = session.decrypt(email_slice);
-    let email_bytes = sgx_utils::unseal(email_slice);
-    let email = match str::from_utf8(&email_bytes) {
-        Ok(r) => {
-            r
-        },
-        Err(_) => {
-            error("decrypt bytes to str failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-        }
-    };
-    error(&format!("email is {}", email));
-    let r = sgx_utils::rand();
-    //TODO: sendmail error
-    session.code = r.to_string();
-    session.data = email.to_string();
-    enclave_state.sessions.update_session(&session_id, &session);
-    os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
-    sgx_status_t::SGX_SUCCESS
-}
-
-
-// when email format incorrect, return [0_u8;32]
-#[no_mangle]
-pub extern "C" fn ec_calc_email_hash(
-    session_id: &[u8;32],
-    cipher_email: *const u8,
-    cipher_email_size: usize,
-    email_hash: &mut[u8;32]
-) -> sgx_status_t {
-    let email_slice = unsafe { slice::from_raw_parts(cipher_email, cipher_email_size as usize) };
-    let mut enclave_state = singleton().inner.lock().unwrap();
-    let session_r = enclave_state.sessions.get_session(session_id);
-    if session_r.is_none() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let mut session = session_r.unwrap();
-    let email_bytes = session.decrypt(email_slice);
-    let hash_r = sgx_utils::hash(&email_bytes);
-    match hash_r {
-        Ok(r) => {
-            *email_hash = r;
-            sgx_status_t::SGX_SUCCESS
-        },
-        Err(err) => {
-            sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE
-        }
-    }
-}
-
-
-#[no_mangle]
-pub extern "C" fn ec_register_email_confirm(
+pub extern "C" fn ec_confirm_email(
     session_id: &[u8;32],
     cipher_code: *const u8,
     code_size: usize,
@@ -263,10 +208,15 @@ pub extern "C" fn ec_register_email_confirm(
     let mut enclave_state = singleton().inner.lock().unwrap();
     let session_r = enclave_state.sessions.get_session(session_id);
     if session_r.is_none() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
     }
     let session = session_r.unwrap();
-    let code_bytes = session.decrypt(code_slice);
+    let code_bytes_r = session.decrypt(code_slice);
+    if code_bytes_r.is_err() {
+        error("decrypt code failed");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let code_bytes = code_bytes_r.unwrap();
     let code = match str::from_utf8(&code_bytes) {
         Ok(r) => r,
         Err(_) => {
@@ -327,10 +277,14 @@ pub extern "C" fn ec_auth_oauth(
     let mut enclave_state = singleton().inner.lock().unwrap();
     let session_r = enclave_state.sessions.get_session(session_id);
     if session_r.is_none() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
     }
     let session = session_r.unwrap();
-    let code_bytes = session.decrypt(code_slice);
+    let code_bytes_r = session.decrypt(code_slice);
+    if code_bytes_r.is_err() {
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let code_bytes = code_bytes_r.unwrap();
     let code = match str::from_utf8(&code_bytes) {
         Ok(r) => r,
         Err(_) => {
@@ -348,7 +302,7 @@ pub extern "C" fn ec_auth_oauth(
         _ => Err(GenericError::from("error type"))
     };
     if oauth_result.is_err() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        return sgx_status_t::SGX_ERROR_INVALID_FUNCTION;
     }
     let auth_account = oauth_result.unwrap();
     let auth_account_with_type = format!(
@@ -383,7 +337,11 @@ pub extern "C" fn ec_auth_email_confirm(
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     let session = session_r.unwrap();
-    let code_bytes = session.decrypt(code_slice);
+    let code_bytes_r = session.decrypt(code_slice);
+    if code_bytes_r.is_err() {
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let code_bytes = code_bytes_r.unwrap();
     let code = match str::from_utf8(&code_bytes) {
         Ok(r) => r,
         Err(_) => {
@@ -436,19 +394,27 @@ pub extern "C" fn ec_sign_auth(
 
 #[no_mangle]
 pub extern "C" fn ec_sign_auth_jwt(
+    session_id: &[u8;32],
     auth_hash: &[u8;32],
     auth_id: i32,
-    exp: u64,
+    exp: usize,
     token_b: &mut [u8;1024],
     token_b_size: &mut i32
 ) -> sgx_status_t {
     info(&format!("sign with hash {:?} and seq {}", auth_hash, auth_id));
     let mut enclave_state = singleton().inner.lock().unwrap();
+    let mut enclave_state = singleton().inner.lock().unwrap();
+    let session_r = enclave_state.sessions.get_session(session_id);
+    if session_r.is_none() {
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let session = session_r.unwrap();
+    let acc_hash = os_utils::encode_hex(auth_hash);
     let my_claims = Claims {
-        sub: "abc".to_string(),
-        issuer: "0xabc1".to_string(),
-        audience: "def1".to_string(),
-        exp: 1690233226,
+        sub: acc_hash,
+        issuer: "dauth".to_string(),
+        audience: "sample_client".to_string(),
+        exp: exp,
     };
     let pem_key = br###"-----BEGIN RSA PRIVATE KEY-----
     MIIG4wIBAAKCAYEAsVOK7r90J0uJQFLlLq1XlrFhcH7xurhMY/LDWRNR9GYx6QGj
@@ -495,9 +461,10 @@ pub extern "C" fn ec_sign_auth_jwt(
         &my_claims, 
         &key
     ).unwrap();
-    *token_b = token.as_bytes().try_into().unwrap();
-    *token_b_size = token_b.len().try_into().unwrap();
-    //*signature = signed.try_into().unwrap();
+    let cipher_token = session.encrypt(token.as_bytes());
+    let len = cipher_token.len();
+    *token_b = cipher_token.try_into().unwrap();
+    *token_b_size = len.try_into().unwrap();
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -611,3 +578,68 @@ Yj4r6tKNZcgTBqeQ42YQTxW0Pdhi396GzRml7FvTCae/26MnJqAS
     println!("token is {}", token);
     sgx_status_t::SGX_SUCCESS
 }
+#[no_mangle]
+pub extern "C" fn ec_send_seal_email(
+    session_id: &[u8;32],
+    seal_email: *const u8,
+    email_size: usize,
+) -> sgx_status_t {
+    let email_slice = unsafe { slice::from_raw_parts(seal_email, email_size as usize) };
+    let mut enclave_state = singleton().inner.lock().unwrap();
+    let session_r = enclave_state.sessions.get_session(session_id);
+    if session_r.is_none() {
+        error(&format!("sgx session {:?} not found.", session_id));
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let mut session = session_r.unwrap();
+    //let email_bytes = session.decrypt(email_slice);
+    let email_bytes = sgx_utils::unseal(email_slice);
+    let email = match str::from_utf8(&email_bytes) {
+        Ok(r) => {
+            r
+        },
+        Err(_) => {
+            error("decrypt bytes to str failed");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
+    error(&format!("email is {}", email));
+    let r = sgx_utils::rand();
+    //TODO: sendmail error
+    session.code = r.to_string();
+    session.data = email.to_string();
+    enclave_state.sessions.update_session(&session_id, &session);
+    os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
+    sgx_status_t::SGX_SUCCESS
+}
+
+
+// when email format incorrect, return [0_u8;32]
+#[no_mangle]
+pub extern "C" fn ec_calc_email_hash(
+    session_id: &[u8;32],
+    cipher_email: *const u8,
+    cipher_email_size: usize,
+    email_hash: &mut[u8;32]
+) -> sgx_status_t {
+    let email_slice = unsafe { slice::from_raw_parts(cipher_email, cipher_email_size as usize) };
+    let mut enclave_state = singleton().inner.lock().unwrap();
+    let session_r = enclave_state.sessions.get_session(session_id);
+    if session_r.is_none() {
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    let mut session = session_r.unwrap();
+    let email_bytes_r = session.decrypt(email_slice);
+    let email_bytes = email_bytes_r.unwrap();
+    let hash_r = sgx_utils::hash(&email_bytes);
+    match hash_r {
+        Ok(r) => {
+            *email_hash = r;
+            sgx_status_t::SGX_SUCCESS
+        },
+        Err(err) => {
+            sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE
+        }
+    }
+}
+

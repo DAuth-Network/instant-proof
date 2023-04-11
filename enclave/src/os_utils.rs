@@ -45,9 +45,14 @@ Please use the following code to verify your account:
 
 {}
 .", from_account, to_account, c_code);
-    tls_write(&mut stream, m_lines);
+    let result = tls_write(&mut stream, m_lines);
     tls_write(&mut stream, "QUIT");
-    Ok(())
+    info(&format!("mail result is {}", result));
+    if result.contains("250 Ok") {
+        Ok(())
+    } else {
+        Err(GenericError::from("send mail failed"))
+    }
 }
 
 
@@ -60,7 +65,7 @@ fn tls_read(conn: &mut tls::Conn<TcpStream>) -> String {
     return output.to_string();
 }
 
-fn tls_write(conn: &mut tls::Conn<TcpStream>, content: &str) -> () {
+fn tls_write(conn: &mut tls::Conn<TcpStream>, content: &str) -> String {
     content.split('\n').for_each(|l| {
         info(&format!("C: {}", l));
         let l_enter = format!("{}\r\n", l);
@@ -68,7 +73,7 @@ fn tls_write(conn: &mut tls::Conn<TcpStream>, content: &str) -> () {
         info(&format!("{} bytes written", r1));
     });
     conn.flush().unwrap();
-    tls_read(conn);
+    tls_read(conn)
 }
 
 

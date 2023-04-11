@@ -119,11 +119,11 @@ pub async fn exchange_key(
     });
     if !sgx_success(result) {
         error!("unsafe call failed.");
-        return fail_resp("SgxError", "unsafe call failed");
+        return fail_resp("SgxError", "Sgx call failed");
     }
     if !sgx_success(sgx_result) {
         error!("sgx return error.");
-        return fail_resp("SgxError", "sgx return error");
+        return fail_resp("DataError", "unable to generate session for the public key");
     }
     let out_key_hex = hex::encode(&out_key);
     let session_id_hex = hex::encode(&session_id);
@@ -155,7 +155,7 @@ pub async fn auth_email(
     // TODO: add a function to sessions with name validate_session
     if let None = sessions.get_session(&req.session_id) {
         info!("session not found");
-        return fail_resp("DataError", "session not found");
+        return fail_resp("SessionError", "session not found");
     }
     let session = sessions.get_session(&req.session_id).unwrap();
     let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
@@ -164,13 +164,17 @@ pub async fn auth_email(
         info!("session expired");
         sessions.close_session(&req.session_id);
         close_ec_session(e.geteid(), &session_id_b);
-        return fail_resp("DataError", "session expired");
+        return fail_resp("SessionError", "session expired");
     }
 
-    let email_b = hex::decode(&req.cipher_email).unwrap();
+    let email_b_r = hex::decode(&req.cipher_email);
+    if email_b_r.is_err() {
+        info!("email decode error");
+        return fail_resp("DataError", "email decode error");
+    }
+    let email_b = email_b_r.unwrap();
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     // sendmail
-
     let pool = &endex.thread_pool;
     let result = pool.install(|| {
         unsafe {
@@ -185,14 +189,27 @@ pub async fn auth_email(
     }); 
     if !sgx_success(result) {
         error!("unsafe call failed.");
-        return fail_resp("SgxError", "unsafe call failed");
+        return fail_resp("SgxError", "sgx call failed.");
     }
-    if !sgx_success(sgx_result) {
-        error!("sgx return error.");
-        return fail_resp("SgxError", "sgx return error");
+    info!("sgx result {}", &sgx_result);
+    match sgx_result {
+        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
+            return fail_resp("SessionError", "session invalid");
+        },
+        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
+            return fail_resp("DataError", "decrypt email failed");
+        },
+        sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE => {
+            return fail_resp("SendmailError", "sendmail failed");
+        },
+        sgx_status_t::SGX_SUCCESS => {
+            return succ_resp();
+        },
+        _ => {
+            error!("sgx return unknown error {}", sgx_result);
+            return fail_resp("SgxError", "sgx call failed");
+        },
     }
-    // TODO: email not able to send, handle error
-    succ_resp()
 }
 
 #[derive(Deserialize)]
@@ -204,7 +221,7 @@ pub struct AuthEmailConfirmReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthSuccessResp {
     status: String,
-    token: String
+    cipher_token: String
 }
 
 #[post("/dauth/auth_email_confirm")]
@@ -217,7 +234,7 @@ pub async fn auth_email_confirm(
     // verify session_id
     if let None = sessions.get_session(&req.session_id) {
         info!("session not found");
-        return fail_resp("DataError", "session not found");
+        return fail_resp("SessionError", "session not found");
     }
 
     let session = sessions.get_session(&req.session_id).unwrap();
@@ -229,7 +246,7 @@ pub async fn auth_email_confirm(
         info!("session expired");
         sessions.close_session(&req.session_id);
         close_ec_session(e.geteid(), &session_id_b);
-        return fail_resp("DataError", "session expired");
+        return fail_resp("SessionError", "session expired");
     }
 
     let code_b = hex::decode(&req.cipher_code).unwrap();
@@ -238,7 +255,7 @@ pub async fn auth_email_confirm(
     let mut email_size = 0;
     let result = pool.install(|| {
         unsafe {
-            ecall::ec_register_email_confirm(
+            ecall::ec_confirm_email(
                 e.geteid(), 
                 &mut sgx_result, 
                 &session_id_b,
@@ -252,15 +269,22 @@ pub async fn auth_email_confirm(
     });
     if !sgx_success(result) {
         error!("unsafe call failed.");
-        return fail_resp("SgxError", "unsafe call failed");
+        return fail_resp("SgxError", "sgx call failed");
     }
-    if !sgx_success(sgx_result) {
-        error!("sgx return error.");
-        return fail_resp("SgxError", "sgx return error");
-    }
-    if sgx_result == sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE {
-        info!("OAuth failed");
-        return fail_resp("OsError", "OAuth failed");
+    match sgx_result {
+        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
+            return fail_resp("SessionError", "session invalid");
+        },
+        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
+            return fail_resp("DataError", "decrypt code failed or code not match");
+        },
+        sgx_status_t::SGX_SUCCESS => {
+            info!("confirm mail success");
+        },
+        _ => {
+            error!("sgx return unknown error {}", sgx_result);
+            return fail_resp("SgxError", "sgx call failed");
+        },
     }
     let email_hash_hex = hex::encode(email_hash);
     let size: usize = email_size.try_into().unwrap();
@@ -272,7 +296,10 @@ pub async fn auth_email_confirm(
         acc_hash: email_hash_hex.clone(),
         acc_seal: email_seal_hex,
     };
-    insert_account_if_new(&endex.db_pool, &account);
+    let insert_r = insert_account_if_new(&endex.db_pool, &account);
+    if insert_r.is_err() {
+        return fail_resp("DBError", "insert account failed");
+    }
     let a_id = query_latest_auth_id(&endex.db_pool, &account.acc_hash);
     let next_id = a_id + 1;
     let auth =  Auth {
@@ -282,7 +309,8 @@ pub async fn auth_email_confirm(
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
     };
-    let token_r = sign_auth_jwt(e.geteid(), pool, &auth);
+    let token_r = sign_auth_jwt(
+        e.geteid(), pool, &session_id_b ,&auth);
     if token_r.is_err() {
         return fail_resp("SGXError", "sign auth failed");
     }
@@ -291,7 +319,7 @@ pub async fn auth_email_confirm(
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            token: token
+            cipher_token: token
         }
     )
 }
@@ -305,8 +333,8 @@ pub struct AuthOauthReq {
 }
 
 
-#[post("/dauth/auth_oauth2")]
-pub async fn auth_oauth2(
+#[post("/dauth/auth_oauth")]
+pub async fn auth_oauth(
     req: web::Json<AuthOauthReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
@@ -358,17 +386,26 @@ pub async fn auth_oauth2(
         return fail_resp("SGXError", "");
     }
     info!("sgx result is {:?}", &sgx_result);
-    if sgx_result != sgx_status_t::SGX_SUCCESS {
-        match sgx_result {
-            sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
-                info!("confirm code does not match");
-                return fail_resp("DataError", "confirm code does not match");
-            },
-            _ => {
-                error!("sgx failed.");
-                return fail_resp("SgxError", "");
-            },
+    match sgx_result {
+        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
+            error!("sgx session error");
+            return fail_resp("SessionError", "sgx session not found");
         }
+        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
+            error!("decrypt authorization code failed");
+            return fail_resp("DataError", "authorization code invalid");
+        },
+        sgx_status_t::SGX_ERROR_INVALID_FUNCTION => {
+            error!("oauth failed");
+            return fail_resp("OauthError", "oauth failed");
+        },
+        sgx_status_t::SGX_SUCCESS => {
+            info!("oauth succeed");
+        },
+        _ => {
+            error!("sgx failed.");
+            return fail_resp("SgxError", "");
+        },
     }
     let auth_hash_hex = hex::encode(acc_hash);
     let size: usize = acc_seal_size.try_into().unwrap();
@@ -379,130 +416,13 @@ pub async fn auth_oauth2(
         acc_hash: auth_hash_hex.clone(),
         acc_seal: auth_seal_hex,
     };
-    insert_account_if_new(&endex.db_pool, &auth_account);
-    let a_id = query_latest_auth_id(&endex.db_pool, &auth_hash_hex);
-    let next_id = a_id + 1;
-    let auth = Auth {
-        acc_hash: auth_hash_hex.clone(),
-        auth_id: next_id,
-        auth_type: auth_type,        
-        auth_datetime: utils::now_datetime().unwrap(),
-        auth_exp: utils::system_time() + 3600,
-    };
-    let token_r = sign_auth_jwt(e.geteid(), pool, &auth);
-    if token_r.is_err() {
-        return fail_resp("SGXError", "sign auth failed");
-    }
-    let token = token_r.unwrap();
-    insert_auth(&endex.db_pool, auth);
-    json_resp(AuthSuccessResp{
-        status: SUCC.to_string(),
-        token: token
-    })
-}
-
-
-#[post("/dauth/auth_oauth")]
-pub async fn auth_oauth(
-    req: web::Json<AuthOauthReq>,
-    http_req: HttpRequest,
-    endex: web::Data<AppState>,
-    sessions: web::Data<session::SessionState>
-) -> HttpResponse {
-    info!("github oauth with session_id {}", &req.session_id);
-    // verify session_id
-    if let None = sessions.get_session(&req.session_id) {
-        info!("session not found");
-        return fail_resp("DataError", "session not found");
-    }
-
-    let session = sessions.get_session(&req.session_id).unwrap();
-    let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
-    let e = &endex.enclave;
-    let pool = &endex.thread_pool;
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    if session.expire() {
-        info!("session expired");
-        sessions.close_session(&req.session_id);
-        close_ec_session(e.geteid(), &session_id_b);
-        return fail_resp("DataError", "session expired");
-    }
-    
-    // get audience or client id
-    let claims = auth_token::extract_token(
-        http_req.headers().get("Authorization"),
-        &endex.conf["secret"].as_str()
-    );
-    if claims.is_none() {
-        return fail_resp("DataError", "invalid token");
-    }
-    let claims2 = claims.unwrap();
-
-    let auth_type_r = AuthType::from_str(&req.oauth_type);
-    if auth_type_r.is_none() {
-        return fail_resp("ReqError", "oauth type not found");
-    }
-    let auth_type = auth_type_r.unwrap();
-    let result = match auth_type {
-        AuthType::Google => google_oauth(
-            &endex.conf["google_client_id"], 
-            &endex.conf["google_client_secret"],
-            &endex.conf["google_redirect_url"],
-            &req.cipher_code),
-        AuthType::Github => github_oauth(
-            &endex.conf["github_client_id"], 
-            &endex.conf["github_client_secret"],
-            &req.cipher_code),
-        _ => Err(GenericError::from("wrong auth type"))
-    };
+    let result = insert_account_if_new(&endex.db_pool, &auth_account);
     if result.is_err() {
-        error!("oauth call failed.");
-        return fail_resp("OauthError", &result.unwrap().to_string());
+        error!("insert account failed");
+        return fail_resp("DBError", "insert account failed");
     }
-    let oauth_value = result.unwrap();
-    let oauth_with_type = format!(
-        "{}@{}",
-        oauth_value,
-        auth_type.to_string()
-    );
-    let oauth_value_b = oauth_with_type.as_bytes();
-    info!("oauth value {:?}", &oauth_with_type);
-    let mut auth_hash = [0_u8;32];
-    let mut auth_seal = [0_u8;1024];
-    let mut auth_size = 0;
-
-    let result2 = pool.install(|| {
-        unsafe {
-            ecall::ec_seal(
-                endex.enclave.geteid(),
-                &mut sgx_result,
-                oauth_value_b.as_ptr() as *const u8,
-                oauth_value_b.len(),
-                &mut auth_hash,
-                &mut auth_seal,
-                &mut auth_size
-            )
-        }
-    }); 
-    if !sgx_success(result2) {
-        error!("unsafe error.");
-        return fail_resp("SgxError", "");
-    }
-    if !sgx_success(sgx_result) {
-        error!("sgx return error.");
-        return fail_resp("SgxError", "sgx return error");
-    }
-    let auth_hash_hex = hex::encode(auth_hash);
-    let size: usize = auth_size.try_into().unwrap();
-    let auth_seal_hex = hex::encode(&auth_seal[..size]);
-    let account = Account {
-        acc_hash: auth_hash_hex.clone(),
-        acc_seal: auth_seal_hex,
-    };
-    insert_account_if_new(&endex.db_pool, &account);
     let a_id = query_latest_auth_id(&endex.db_pool, &auth_hash_hex);
     let next_id = a_id + 1;
-    let exp = utils::system_time() + 3600;
     let auth = Auth {
         acc_hash: auth_hash_hex.clone(),
         auth_id: next_id,
@@ -510,62 +430,24 @@ pub async fn auth_oauth(
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
     };
-    let token_r = sign_auth_jwt(e.geteid(), pool, &auth);
+    let token_r = sign_auth_jwt(
+        e.geteid(), pool, &session_id_b, &auth);
     if token_r.is_err() {
-        return fail_resp("SGXError", "sign auth failed");
+        return fail_resp("SgxError", "sign auth failed");
     }
     let token = token_r.unwrap();
     insert_auth(&endex.db_pool, auth);
     json_resp(AuthSuccessResp{
         status: SUCC.to_string(),
-        token: token
+        cipher_token: token
     })
-}
-
-
-
-fn sign_auth(
-    eid: sgx_enclave_id_t, 
-    pool: &rayon::ThreadPool, 
-    a_hash: &[u8;32], 
-    a_id: i32,
-    exp: u64
-) -> utils::GenericResult<(String,String)> {
-    info!("sign auth with id {} hash {:?}", a_id, a_hash);
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut pub_k: [u8;65] = [0_u8;65];
-    let mut signature: [u8;65] = [0_u8;65];
-    let result = pool.install(|| {
-        unsafe {
-            ecall::ec_sign_auth(
-                eid,
-                &mut sgx_result,
-                &a_hash,
-                a_id,
-                exp,
-                &mut pub_k,
-                &mut signature
-            )
-        }
-    }); 
-    match result {
-        sgx_status_t::SGX_SUCCESS => {
-            let signature_hex = hex::encode(signature);
-            let pub_k_hex = hex::encode(pub_k);
-            Ok((pub_k_hex, signature_hex))
-        },
-        _ => {
-            error!("sgx failed.");
-            Err(GenericError::from("ec_auth_sign failed"))
-        }
-    }
-
 }
 
 
 fn sign_auth_jwt(
     eid: sgx_enclave_id_t, 
     pool: &rayon::ThreadPool, 
+    session_id: &[u8;32],
     auth: &Auth
 ) -> utils::GenericResult<String> {
     info!("sign auth for {:?} {} times", &auth.acc_hash, &auth.auth_id);
@@ -578,6 +460,7 @@ fn sign_auth_jwt(
             ecall::ec_sign_auth_jwt(
                 eid,
                 &mut sgx_result,
+                session_id,
                 &hash_b,
                 auth.auth_id,
                 auth.auth_exp,
@@ -589,8 +472,8 @@ fn sign_auth_jwt(
     match result {
         sgx_status_t::SGX_SUCCESS => {
             let size: usize = token_size.try_into().unwrap();
-            let token_s = str::from_utf8(&token[..size]).unwrap();
-            Ok(token_s.to_string())
+            let token_s = hex::encode(&token[..size]);
+            Ok(token_s)
         },
         _ => {
             error!("sgx failed.");

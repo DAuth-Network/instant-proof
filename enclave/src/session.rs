@@ -14,6 +14,7 @@ use std::prelude::v1::*;
 use super::sgx_utils;
 use super::os_utils;
 use super::log::*;
+use super::err::*;
 
 /// User state includes a Map
 /// which stores user account -> confirm code mapping
@@ -36,7 +37,7 @@ impl Session {
         }
     }
 
-    pub fn decrypt(&self, content: &[u8]) -> Vec<u8> {
+    pub fn decrypt(&self, content: &[u8]) -> GenericResult<Vec<u8>> {
         sgx_utils::decrypt(
             &self.shr_k,
             content,

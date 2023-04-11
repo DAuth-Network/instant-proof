@@ -8,6 +8,7 @@ pub type GenericResult<T> = Result<T, GenericError>;
 
 #[derive(Clone, Debug)]
 pub enum ErrorKind {
+    DecryptError,
     SendMailError,
     OauthAccessTokenError,
     OauthProfileError,

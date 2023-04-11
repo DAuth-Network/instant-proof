@@ -44,7 +44,7 @@ enclave {
             int mail_size
         );
 
-        public sgx_status_t ec_register_email_confirm(
+        public sgx_status_t ec_confirm_email(
             [in, size=32]uint8_t* session_id,
             [in, size=code_size]uint8_t* cipher_code,
             int code_size,
@@ -87,6 +87,7 @@ enclave {
         );
         
         public sgx_status_t ec_sign_auth_jwt(
+            [in, size=32]uint8_t* session_id,
             [in, size=32]uint8_t* a_hash,
             int a_seq,
             uint64_t auth_exp,
