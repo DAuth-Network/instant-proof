@@ -1,5 +1,5 @@
-create database dauth3;
-use dauth3;
+create database dapi;
+use dapi;
 
 
 drop table if exists account;

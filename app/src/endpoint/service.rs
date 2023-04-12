@@ -501,7 +501,8 @@ fn close_ec_session(eid: sgx_enclave_id_t, session_id_b: &[u8;32]) {
 #[get("/dauth/sdk/health")]
 pub async fn health(endex: web::Data<AppState>) -> impl Responder {
     // for health check
-    HttpResponse::Ok().body("Webapp is up and running!")
+    info!("dauth sdk is up and running");
+    HttpResponse::Ok().body("dauth sdk is up and running!")
 }
 
 
