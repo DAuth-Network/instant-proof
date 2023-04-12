@@ -92,7 +92,7 @@ fn sgx_success(t: sgx_status_t) -> bool {
    while tee accept pub key format as [u8;64].
    Remove 04 before send to tee and add 04 before send to browser.
 */
-#[post("/dauth/exchange_key")]
+#[post("/dauth/sdk/exchange_key")]
 pub async fn exchange_key(
     req: web::Json<ExchangeKeyReq>,
     endex: web::Data<AppState>,
@@ -144,7 +144,7 @@ pub struct AuthEmailReq {
 }
 
 // with BaseResp
-#[post("/dauth/auth_email")]
+#[post("/dauth/sdk/auth_email")]
 pub async fn auth_email(
     req: web::Json<AuthEmailReq>,
     endex: web::Data<AppState>,
@@ -224,7 +224,7 @@ pub struct AuthSuccessResp {
     cipher_token: String
 }
 
-#[post("/dauth/auth_email_confirm")]
+#[post("/dauth/sdk/auth_email_confirm")]
 pub async fn auth_email_confirm(
     req: web::Json<AuthEmailConfirmReq>,
     endex: web::Data<AppState>,
@@ -334,7 +334,7 @@ pub struct AuthOauthReq {
 }
 
 
-#[post("/dauth/auth_oauth")]
+#[post("/dauth/sdk/auth_oauth")]
 pub async fn auth_oauth(
     req: web::Json<AuthOauthReq>,
     http_req: HttpRequest,
@@ -498,7 +498,7 @@ fn close_ec_session(eid: sgx_enclave_id_t, session_id_b: &[u8;32]) {
 }
 
 
-#[get("/dauth/health")]
+#[get("/dauth/sdk/health")]
 pub async fn health(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     HttpResponse::Ok().body("Webapp is up and running!")
