@@ -73,6 +73,7 @@ pub struct Auth {
     pub auth_type: AuthType,
     pub auth_datetime: PrimitiveDateTime,
     pub auth_exp: u64,
+    pub audience: String,
 }
 
 
@@ -129,8 +130,8 @@ pub fn insert_auth(pool: &Pool, hist: Auth) {
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
     tx.exec_drop(
         "insert into auth (
-            acc_hash, auth_id, auth_type, auth_datetime, auth_exp
-        ) values (?, ?, ?, ?, ?)",
+            acc_hash, auth_id, auth_type, auth_datetime, auth_exp, audience,
+        ) values (?, ?, ?, ?, ?, ?)",
         (hist.acc_hash,
             hist.auth_id,
             hist.auth_type.to_string(),

@@ -308,6 +308,7 @@ pub async fn auth_email_confirm(
         auth_type: AuthType::Email,
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
+        audience: "demo_client".to_string(),
     };
     let token_r = sign_auth_jwt(
         e.geteid(), pool, &session_id_b ,&auth);
@@ -429,6 +430,7 @@ pub async fn auth_oauth(
         auth_type: auth_type,        
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
+        audience: "demo_client".to_string(),
     };
     let token_r = sign_auth_jwt(
         e.geteid(), pool, &session_id_b, &auth);
