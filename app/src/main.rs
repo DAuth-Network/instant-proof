@@ -154,6 +154,8 @@ async fn main() -> std::io::Result<()> {
     let server_url = format!("0.0.0.0:{}", conf.get("node_api_port").unwrap());
     let server_port: u16 = conf.get("node_api_port").unwrap().parse().unwrap();
     let conf2 = conf.clone();
+    let default_path = "/dauth".to_string();
+    let subpath = conf2.get("path").unwrap_or(&default_path).to_owned();
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
         let app = App::new()
@@ -162,11 +164,13 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(web::Data::clone(&edata))
             .app_data(web::Data::clone(&ustate))
-            .service(exchange_key)
-            .service(auth_email)
-            .service(auth_email_confirm)
-            .service(auth_oauth)
-            .service(health);
+            .service(web::scope(&subpath)
+                .service(exchange_key)
+                .service(auth_email)
+                .service(auth_email_confirm)
+                .service(auth_oauth)
+                .service(health)
+            );
         // load index.html for testing only when env is dev
         let default_env = "prod".to_string();
         let env = conf.get("env").unwrap_or(&default_env);
