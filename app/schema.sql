@@ -32,6 +32,6 @@ drop user 'duadmin';
 flush privileges;
 create user 'duadmin'@'localhost' identified by 'ks123';
 create user 'duadmin'@'%' identified by 'ks123';
-grant all on dauth.* to 'duadmin'@'localhost';
-grant all on dauth.* to 'duadmin'@'%';
+grant all on dapi.* to 'duadmin'@'localhost';
+grant all on dapi.* to 'duadmin'@'%';
 flush privileges;

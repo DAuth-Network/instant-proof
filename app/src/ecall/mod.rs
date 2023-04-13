@@ -92,7 +92,7 @@ extern {
         auth_hash: &[u8;32],
         auth_seq: i32,
         auth_exp: u64,
-        token: &mut [u8;1024],
+        token: &mut [u8;2048],
         token_size: *mut u32
     ) -> sgx_status_t;
 

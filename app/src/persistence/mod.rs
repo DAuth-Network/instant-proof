@@ -125,19 +125,23 @@ pub fn query_account(
     Ok(result)
 }
 
-pub fn insert_auth(pool: &Pool, hist: Auth) {
-    let mut conn = pool.get_conn().unwrap();
-    let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
+pub fn insert_auth(
+    pool: &Pool, hist: Auth
+) -> GenericResult<()> {
+    let mut conn = pool.get_conn()?;
+    let mut tx = conn.start_transaction(TxOpts::default())?;
     tx.exec_drop(
         "insert into auth (
-            acc_hash, auth_id, auth_type, auth_datetime, auth_exp, audience,
+            acc_hash, auth_id, auth_type, auth_datetime, auth_exp, audience
         ) values (?, ?, ?, ?, ?, ?)",
         (hist.acc_hash,
             hist.auth_id,
             hist.auth_type.to_string(),
             hist.auth_datetime,
-            hist.auth_exp)).unwrap();
-    tx.commit().unwrap();
+            hist.auth_exp,
+            hist.audience))?;
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn query_latest_auth_id(pool: &Pool, acc_hash: &String) -> i32{

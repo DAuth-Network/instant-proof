@@ -316,7 +316,11 @@ pub async fn auth_email_confirm(
         return fail_resp("SGXError", "sign auth failed");
     }
     let token = token_r.unwrap();
-    insert_auth(&endex.db_pool, auth);
+    let auth_r = insert_auth(&endex.db_pool, auth);
+    if auth_r.is_err() {
+        error!("insert auth failed {}", auth_r.err().unwrap());
+        return fail_resp("DbError", "auth error");
+    }
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
@@ -438,7 +442,11 @@ pub async fn auth_oauth(
         return fail_resp("SgxError", "sign auth failed");
     }
     let token = token_r.unwrap();
-    insert_auth(&endex.db_pool, auth);
+    let auth_r = insert_auth(&endex.db_pool, auth);
+    if auth_r.is_err() {
+        error!("insert auth failed {}", auth_r.err().unwrap());
+        return fail_resp("DbError", "insert auth failed");
+    }
     json_resp(AuthSuccessResp{
         status: SUCC.to_string(),
         cipher_token: token
@@ -455,7 +463,7 @@ fn sign_auth_jwt(
     info!("sign auth for {:?} {} times", &auth.acc_hash, &auth.auth_id);
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     let hash_b = hex::decode(&auth.acc_hash).unwrap().try_into().unwrap();
-    let mut token: [u8;1024] = [0_u8;1024];
+    let mut token: [u8;2048] = [0_u8;2048];
     let mut token_size = 0;
     let result = pool.install(|| {
         unsafe {
@@ -470,9 +478,10 @@ fn sign_auth_jwt(
                 &mut token_size
             )
         }
-    }); 
+    });
     match result {
         sgx_status_t::SGX_SUCCESS => {
+            info!("sign auth jwt succeed");
             let size: usize = token_size.try_into().unwrap();
             let token_s = hex::encode(&token[..size]);
             Ok(token_s)

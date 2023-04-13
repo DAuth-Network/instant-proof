@@ -91,7 +91,7 @@ enclave {
             [in, size=32]uint8_t* a_hash,
             int a_seq,
             uint64_t auth_exp,
-            [out, size=1024]uint8_t* token,
+            [out, size=2048]uint8_t* token,
             [out] uint32_t* token_size
         );
 
