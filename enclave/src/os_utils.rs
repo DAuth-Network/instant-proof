@@ -8,16 +8,16 @@ use std::io::prelude::*;
 use std::io::Write;
 use std::string::ToString;
 use std::str;
-use super::config::Config;
+use super::config::Email;
 use super::log::*;
 
 
-pub fn sendmail(conf: &Config, to_account:&str, c_code: &str) -> GenericResult<()> {
+pub fn sendmail(conf: &Email, to_account:&str, c_code: &str) -> GenericResult<()> {
     info("send mail");
-    let from_account = &conf.email_sender;
-    let account = &conf.email_account;
-    let password = &conf.email_password;
-    let server = &conf.email_server;
+    let from_account = &conf.sender;
+    let account = &conf.account;
+    let password = &conf.password;
+    let server = &conf.server;
     let port = 465;
     let conn_addr = format!("{}:{}", server, port);
     let raw_stream = TcpStream::connect(conn_addr).unwrap();

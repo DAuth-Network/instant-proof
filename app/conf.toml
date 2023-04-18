@@ -1,12 +1,37 @@
+[api]
+port = 30000
+protocol = "http"
+prefix = "/dauth/sdk"
 env = "dev"
-email_account = "verify@keysafe.network"
-email_password = ""
-email_server = ""
-db_host = "127.0.0.1"
-db_user = "ksadmin"
-db_password = "ks123"
-db_port = 12345
-db_name = "keysafe"
-node_api_port = 30000
-secret = "keysafe_password_for_test"
-cru_api_server = ""
+host = "127.0.0.1"
+workers = 16
+
+[email]
+account = "verify@keysafe.network"
+password = ""
+server = ""
+sender = ""
+
+[db.auth]
+host = "127.0.0.1"
+user = "ksadmin"
+password = "ks123"
+port = 12345
+name = "keysafe"
+
+[db.client]
+host = "127.0.0.1"
+user = "ksadmin"
+password = "ks123"
+port = 12345
+name = "keysafe"
+
+[oauth.google]
+client_id = ""
+client_secret = ""
+redirect_url = ""
+
+[oauth.github]
+client_id = ""
+client_secret = ""
+redirect_url = ""

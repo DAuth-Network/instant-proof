@@ -1,4 +1,3 @@
-use super::config::Config;
 use super::err::*;
 use std::string::String;
 use std::vec::Vec;
@@ -32,17 +31,17 @@ pub fn google_oauth2(cid: &str, cse: &str, code: &str) -> GenericResult<String>{
     Ok(account_resp)
 }
 
-fn twitter_oauth(conf: &Config, code: &str) -> GenericResult<String>{
+fn twitter_oauth(code: &str) -> GenericResult<String>{
     Ok("".to_string())
 }
 
 
-fn discord_oauth(conf: &Config, code: &str) -> GenericResult<String>{
+fn discord_oauth(code: &str) -> GenericResult<String>{
     Ok("".to_string())
 }
 
 
-fn telegram_oauth(conf: &Config, code: &str) -> GenericResult<String>{
+fn telegram_oauth(code: &str) -> GenericResult<String>{
     Ok("".to_string())
 }
 

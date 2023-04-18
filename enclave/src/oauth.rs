@@ -8,18 +8,18 @@ use serde_json::{Result, Value, json, to_string};
 use std::collections::HashMap;
 
 
-use super::config::Config;
+use super::config::OAuthClient;
 use super::err::*;
 use super::log::*;
 
-pub fn google_oauth(conf: &Config, code: &str) -> GenericResult<String>{
+pub fn google_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String>{
     let token_req = format!(
         "code={}&client_id={}&client_secret={}&grant_type={}&redirect_url={}",
         code,
-        conf.google_client_id,
-        conf.google_client_secret,
+        conf.client_id,
+        conf.client_secret,
         "authorization_code",
-        conf.google_redirect_url
+        conf.redirect_url
     );
     let token_headers = HashMap::from([
         ("Content-Type", "application/x-www-form-urlencoded"),
@@ -51,7 +51,7 @@ pub fn google_oauth(conf: &Config, code: &str) -> GenericResult<String>{
     Ok(v2["sub"].clone().to_string())
 }
 
-
+/* 
 pub fn twitter_oauth(conf: &Config, code: &str) -> GenericResult<String>{
     Ok("".to_string())
 }
@@ -65,13 +65,13 @@ pub fn discord_oauth(conf: &Config, code: &str) -> GenericResult<String>{
 pub fn telegram_oauth(conf: &Config, code: &str) -> GenericResult<String>{
     Ok("".to_string())
 }
+*/
 
-
-pub fn github_oauth(conf: &Config, code: &str) -> GenericResult<String>{
+pub fn github_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String>{
     let token_req = format!(
         "client_id={}&client_secret={}&code={}",
-        conf.github_client_id,
-        conf.github_client_secret,
+        conf.client_id,
+        conf.client_secret,
         code);
     let token_headers = HashMap::from([
         ("Content-Type", "application/x-www-form-urlencoded")

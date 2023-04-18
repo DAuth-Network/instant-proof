@@ -4,31 +4,65 @@ use std::string::*;
 use std::fmt::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Config {
-    pub email_account: String,
-    pub email_password: String,
-    pub email_sender: String,
-    pub email_server: String,
-    pub github_client_id: String,
-    pub github_client_secret: String,
-    pub google_client_id: String,
-    pub google_client_secret: String,
-    pub google_redirect_url: String,
+pub struct Email {
+    pub account: String,
+    pub password: String,
+    pub sender: String,
+    pub server: String,
 }
 
-impl Config {
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OAuthClient {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OAuth {
+    pub github: OAuthClient,
+    pub google: OAuthClient,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TeeConfig {
+    pub email: Email,
+    pub oauth: OAuth,
+}
+
+impl TeeConfig {
     pub fn default() -> Self {
         Self {
-            email_account: "".to_string(),
-            email_password: "".to_string(),
-            email_sender: "".to_string(),
-            email_server: "".to_string(),
-            github_client_id: "".to_string(),
-            github_client_secret: "".to_string(),
-            google_client_id: "".to_string(),
-            google_client_secret: "".to_string(),
-            google_redirect_url: "".to_string(),
+            email: Email::default(),
+            oauth: OAuth { 
+                github: OAuthClient::default(), 
+                google: OAuthClient::default() }
         }
     }
 }
 
+impl OAuthClient {
+    fn default() -> Self {
+        Self {
+            client_id: emp(),
+            client_secret: emp(),
+            redirect_url: emp(),
+        }
+    }
+}
+
+impl Email {
+    fn default() -> Self {
+        Self {
+            account: emp(),
+            password: emp(),
+            sender: emp(),
+            server: emp(),
+        }
+    }
+}
+
+fn emp() -> String {
+    "".to_string()
+}

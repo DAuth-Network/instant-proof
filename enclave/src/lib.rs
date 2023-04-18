@@ -28,7 +28,7 @@ extern crate sgx_tseal;
 
 
 use std::convert::TryInto;
-use config::Config;
+use config::*;
 use serde::{Deserialize, Serialize};
 use sgx_trts::enclave;
 use sgx_types::*;
@@ -65,7 +65,7 @@ struct EnclaveState {
     pub_k_r1: [u8;64],
     pub_k_k1: [u8;65],
     sessions: Sessions,
-    config: config::Config
+    config: TeeConfig
 }
 
 // Rust doesn't support mutable statics, as it could lead to bugs in a multithreading setting
@@ -93,7 +93,7 @@ fn singleton() -> &'static SingletonReader {
                     pub_k_r1: sgx_utils::key_to_bigendian(&pub_k),
                     pub_k_k1: pub_k1.serialize(),
                     sessions: Sessions::new(prv_k),
-                    config: config::Config::default()
+                    config: config::TeeConfig::default()
                 }),
             };
             // Store it to the static var, i.e. initialize it
@@ -184,7 +184,10 @@ pub extern "C" fn ec_send_cipher_email(
     session.code = r.to_string();
     session.data = email.to_string();
     enclave_state.sessions.update_session(&session_id, &session);
-    let mail_r = os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
+    let mail_r = os_utils::sendmail(
+        &enclave_state.config.email, 
+        &email, 
+        &r.to_string());
     if mail_r.is_err() {
         error("send mail failed");
         return sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE;
@@ -294,11 +297,13 @@ pub extern "C" fn ec_auth_oauth(
     };
     info(&format!("oauth code is {}", &code));
     let oauth_result = match auth_type {
-        1 => google_oauth(&enclave_state.config, code),
+        1 => google_oauth(&enclave_state.config.oauth.google, code),
+        /* 
         2 => twitter_oauth(&enclave_state.config, code),
         3 => discord_oauth(&enclave_state.config, code),
         4 => telegram_oauth(&enclave_state.config, code),
-        5 => github_oauth(&enclave_state.config, code),
+        */
+        5 => github_oauth(&enclave_state.config.oauth.github, code),
         _ => Err(GenericError::from("error type"))
     };
     if oauth_result.is_err() {
@@ -613,7 +618,7 @@ pub extern "C" fn ec_send_seal_email(
     session.code = r.to_string();
     session.data = email.to_string();
     enclave_state.sessions.update_session(&session_id, &session);
-    os_utils::sendmail(&enclave_state.config, &email, &r.to_string());
+    os_utils::sendmail(&enclave_state.config.email, &email, &r.to_string());
     sgx_status_t::SGX_SUCCESS
 }
 

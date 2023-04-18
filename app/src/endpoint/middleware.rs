@@ -64,7 +64,7 @@ where
             });
         }
         let endex = request.app_data::<web::Data<AppState>>().unwrap();
-        let secret = &endex.conf.get("secret").unwrap();
+        let secret = "ehllo";
         if auth_token::verify_token(request.headers().get("Authorization"), secret) {
             println!("path that requires token and verifying.");
             let res = self.service.call(request);
