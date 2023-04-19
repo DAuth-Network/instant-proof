@@ -573,9 +573,9 @@ q0/olB6jMb9CQcSlNgFbHmySRYutuYyAmhPjtyH2fJ93qEMCnFnr17vlh/gF4+t2
 Yj4r6tKNZcgTBqeQ42YQTxW0Pdhi396GzRml7FvTCae/26MnJqAS
 -----END RSA PRIVATE KEY-----"###;
     let my_claims = Claims {
-        sub: "abc".to_string(),
-        issuer: "0xabc1".to_string(),
-        audience: "def1".to_string(),
+        sub: "c4326162ae0616bf6cdeee9def166f2ed6901fe1c20c1caeb75aab11a14fccdb".to_string(),
+        issuer: "dauth".to_string(),
+        audience: "demo".to_string(),
         exp: 1690233226,
     };
     let key = EncodingKey::from_rsa_pem(pem_key).unwrap();

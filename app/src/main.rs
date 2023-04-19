@@ -159,6 +159,7 @@ async fn main() -> std::io::Result<()> {
                 .service(auth_email)
                 .service(auth_email_confirm)
                 .service(auth_oauth)
+                .service(jwks)
                 .service(health)
             );
         // load index.html for testing only when env is dev

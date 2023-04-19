@@ -1,6 +1,7 @@
 extern crate openssl;
 #[macro_use]
 use std::str;
+use actix_http::header::{HeaderMap, ORIGIN};
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{
@@ -98,6 +99,7 @@ fn sgx_success(t: sgx_status_t) -> bool {
 #[post("/exchange_key")]
 pub async fn exchange_key(
     req: web::Json<ExchangeKeyReq>,
+    http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>    
 ) ->  impl Responder {
@@ -106,7 +108,7 @@ pub async fn exchange_key(
     let pool = &endex.thread_pool;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     // remove 04 from pub key
-    if get_client_name(&endex.clients, &req.client_id).is_none() {
+    if get_client_name(&endex.clients, &req.client_id, &http_req.headers()).is_none() {
         return fail_resp(DAuthError::ClientError);
     }
     let user_key_r = hex::decode(&req.key[2..]);
@@ -158,12 +160,16 @@ pub struct AuthEmailReq {
 #[post("/auth_email")]
 pub async fn auth_email(
     req: web::Json<AuthEmailReq>,
+    http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>
 ) -> HttpResponse {
     info!("auth email with session_id {}", &req.session_id);
     // validate client
-    let client_name = get_client_name(&endex.clients, &req.client_id);
+    let client_name = get_client_name(
+        &endex.clients, 
+        &req.client_id,
+        &http_req.headers());
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -233,12 +239,16 @@ pub struct AuthSuccessResp {
 #[post("/auth_email_confirm")]
 pub async fn auth_email_confirm(
     req: web::Json<AuthEmailConfirmReq>,
+    http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>
 ) -> HttpResponse {
     info!("register mail confirm with session_id {}", &req.session_id);
     // validate client
-    let client_name = get_client_name(&endex.clients, &req.client_id);
+    let client_name = get_client_name(
+        &endex.clients, 
+        &req.client_id,
+        &http_req.headers());
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -351,7 +361,10 @@ pub async fn auth_oauth(
 ) -> HttpResponse {
     info!("github oauth with session_id {}", &req.session_id);
     // validate client
-    let client_name = get_client_name(&endex.clients, &req.client_id);
+    let client_name = get_client_name(
+        &endex.clients, 
+        &req.client_id,
+        &http_req.headers());
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -508,6 +521,36 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
 }
 
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JwksResp {
+    keys: Vec<Jwk>
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Jwk {
+    kty: String,
+    e: String,
+    kid: String,
+    n: String
+}
+
+#[get("/jwks.json")]
+pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
+    // for health check
+    info!("dauth sdk is up and running");
+    let jwk = Jwk {
+        e: "AQAB".to_string(),
+        kty: "RSA".to_string(),
+        kid: "e4704eeb-9e00-4ef6-8561-cb54927990c0".to_string(),
+        n: "sVOK7r90J0uJQFLlLq1XlrFhcH7xurhMY_LDWRNR9GYx6QGj-x6qOV68jVkOB4d0O3_tbowONtoKTghNLyfN2l4gDurwUcc7JkEvr6kXGG4Hz2tiM4qpWkvE9YTFliLGKYGC4Izx6UEkLpMDHfTfJKonflIJ6QOoJl7mAGjBcONcPz3FZxqTJEdDFjvps6Qun3mhMV3IYTdsQlBuGw7v8XVGUXta0jTSpqT_b3qYKFjYm1m8_fuG5dK0GOEhVrJBgXa54LprqDismKECBxEI1FT9lsZ9TTS0XNhgGpxGNapdq8--chwGPQTtm-f2lk_G0DJmHtIaYM24XZpQIuHtYSEBkKlDCWnxm4c69Apem-lSV4vUR5gzHQF1B2XNmTpjxnAuSkAhBWrkka2qMsfZprJenCGG1g60bhvBlxhGmcvISoHb1HpUMHZQaotqhHnfZmmgj_ilpqIJc8580bRhD3u_3FZV1v1IuHT-fb0hGgb6c_e94d3xGJCUlX6Xs5cv".to_string(),
+    };
+    json_resp(JwksResp {
+        keys: vec![jwk]
+    })
+}
+
+
+
 fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
     let session_id_b_r = hex::decode(session_id);
     if session_id_b_r.is_err() {
@@ -526,10 +569,21 @@ fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
 }
 
 
-fn get_client_name(clients: &Vec<Client>, client_id: &str) -> Option<String> {
+fn get_client_name(clients: &Vec<Client>, client_id: &str, headers: &HeaderMap) -> Option<String> {
     for client in clients {
         if client.client_id == client_id {
-            return Some(client.client_name.clone());
+            let origin_v = headers.get(ORIGIN);
+            if origin_v.is_none() {
+                error!("origin is none");
+                return None
+            }
+            let origin = origin_v.unwrap().to_str().unwrap();
+            if origin.eq(&client.client_origin) {
+                return Some(client.client_name.clone());
+            } else {
+                error!("origin not match");
+                return None;
+            }
         }
     }
     None

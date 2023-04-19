@@ -49,6 +49,8 @@ create user 'duadmin'@'localhost' identified by 'ks123';
 create user 'duadmin'@'%' identified by 'ks123';
 grant all on dapi.* to 'duadmin'@'localhost';
 grant all on dapi.* to 'duadmin'@'%';
+grant all on dclient.* to 'duadmin'@'localhost';
+grant all on dclient.* to 'duadmin'@'%';
 flush privileges;
 
 
