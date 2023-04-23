@@ -29,6 +29,7 @@ use persistence::dclient::*;
 use config::Config;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::env;
 use ocall::*;
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
@@ -87,6 +88,28 @@ fn init_enclave_and_set_conf(conf: TeeConfig) -> SgxEnclave {
     return enclave;
 }
 
+fn read_sgx_sign_pub_key(pool: &rayon::ThreadPool , eid: sgx_enclave_id_t) -> String {
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    let mut pub_key = [0u8; 2048];
+    let mut pub_key_size = 0;
+    let result = pool.install(|| {
+        unsafe {
+            ecall::ec_get_sign_pub_key(
+                eid,
+                &mut sgx_result,
+                &mut pub_key,
+                &mut pub_key_size)
+        }
+    });
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            let size: usize = pub_key_size.try_into().unwrap();
+            let pub_key = str::from_utf8(&pub_key[..size]);
+            return pub_key.unwrap().to_string();
+        },
+        _ => panic!("Enclave generate key-pair failed!")
+    }
+}
 
 /// Create database connection pool using conf from config file 
 fn init_db_pool(conf: &DbConfig) -> Pool {
@@ -119,16 +142,19 @@ fn load_conf(fname: &str) -> DauthConfig {
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     info!("logging!");
-    let conf = load_conf("conf");
+    let mut conf = load_conf("conf");
     let workers: usize = conf.api.workers.try_into().unwrap();
     let pool = rayon::ThreadPoolBuilder::new().num_threads(workers).build().unwrap();
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
+    let enclave = init_enclave_and_set_conf(conf.to_tee_config());
+    let sign_pub = read_sgx_sign_pub_key(&pool, enclave.geteid());
     let edata: web::Data<AppState> = web::Data::new(AppState{
-        enclave: init_enclave_and_set_conf(conf.to_tee_config()),
+        enclave: enclave,
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
-        clients: query_client(&client_db).unwrap()
+        clients: query_client(&client_db).unwrap(),
+        sign_pub: sign_pub,
         // conf: conf.clone()
     });
     // ustate stores user state information e.g. confirmation code that sends
@@ -139,12 +165,9 @@ async fn main() -> std::io::Result<()> {
 
     // add certs to server for https service api
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    builder.set_private_key_file("certs/MyKey.key", SslFiletype::PEM)
-        .unwrap();
+    builder.set_private_key_file("certs/MyKey.key", SslFiletype::PEM).unwrap();
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
-    let server_url = format!("{}:{}", conf.api.host, conf.api.port);
-    let server_port: u16 = conf.api.port;
     let subpath = conf.api.prefix;
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
@@ -173,9 +196,11 @@ async fn main() -> std::io::Result<()> {
     .workers(workers);
     // uncomment to enable https
     let protocol = conf.api.protocol;
+    let server_url = format!("{}:{}", conf.api.host, conf.api.port);
+    let server_port: u16 = conf.api.port;
     if protocol.eq("https") {
         server.bind_openssl(server_url, builder)?.run().await
     } else {
-        server.bind(("0.0.0.0", server_port))?.run().await
+        server.bind((conf.api.host, server_port))?.run().await
     }
 }

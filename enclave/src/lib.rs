@@ -11,6 +11,10 @@ extern crate sgx_tseal;
 extern crate tiny_keccak;
 extern crate libsecp256k1;
 extern crate jsonwebtoken;
+extern crate rsa;
+extern crate rand;
+extern crate pkcs1;
+extern crate pkcs8;
 
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
@@ -19,6 +23,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate http_req;
 extern crate sgx_rand;
+extern crate sgx_tcrypto_helper;
 
 #[macro_use]
 extern crate serde_cbor;
@@ -26,23 +31,26 @@ extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
 extern crate sgx_tseal;
 
-
 use std::convert::TryInto;
 use config::*;
 use serde::{Deserialize, Serialize};
 use sgx_trts::enclave;
 use sgx_types::*;
 use sgx_tcrypto::*;
-
+use sgx_tcrypto_helper::RsaKeyPair; 
+use sgx_tcrypto_helper::rsa2048::{Rsa2048KeyPair};
 use std::mem::MaybeUninit;
 use std::slice;
 use std::sync::{Once, SgxMutex};
-
 use std::string::{String, ToString};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
 use std::str;
 use std::vec::Vec;
+use pkcs1::der::Encode;
+use pkcs8::{
+    DecodePrivateKey, DecodePublicKey, Document, EncodePrivateKey, EncodePublicKey, SecretDocument,
+};
 
 pub mod sgx_utils;
 pub mod os_utils;
@@ -59,13 +67,15 @@ use self::log::*;
 use oauth::*;
 use libsecp256k1::{SecretKey, PublicKey};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
-
+use rand::rngs::OsRng;
 
 struct EnclaveState {
     pub_k_r1: [u8;64],
     pub_k_k1: [u8;65],
+    rsa_pub_key: rsa::RSAPublicKey,
+    rsa_prv_key: rsa::RSAPrivateKey,
     sessions: Sessions,
-    config: TeeConfig
+    config: TeeConfig,
 }
 
 // Rust doesn't support mutable statics, as it could lead to bugs in a multithreading setting
@@ -87,13 +97,19 @@ fn singleton() -> &'static SingletonReader {
             // gen secp256k1 keypair
             let prv_k1 = SecretKey::parse(&prv_k.r).unwrap();
             let pub_k1 = PublicKey::from_secret_key(&prv_k1);
+            // gen rsa256 keypair
+            let mut rng = OsRng;
+            let rsa_prv_key = rsa::RSAPrivateKey::new(&mut rng, 2048).expect("failed to generate a key");
+            let rsa_pub_key: rsa::RSAPublicKey = rsa_prv_key.clone().try_into().unwrap();
 
             let singleton = SingletonReader {
                 inner: SgxMutex::new(EnclaveState {
                     pub_k_r1: sgx_utils::key_to_bigendian(&pub_k),
                     pub_k_k1: pub_k1.serialize(),
                     sessions: Sessions::new(prv_k),
-                    config: config::TeeConfig::default()
+                    config: config::TeeConfig::default(),
+                    rsa_prv_key: rsa_prv_key,
+                    rsa_pub_key: rsa_pub_key,
                 }),
             };
             // Store it to the static var, i.e. initialize it
@@ -128,6 +144,17 @@ pub extern "C" fn ec_key_exchange(
     } else {
         sgx_status_t::SGX_SUCCESS
     }
+}
+
+#[no_mangle]
+pub extern "C" fn ec_get_sign_pub_key(
+    pub_key: &mut[u8;2048],
+    pub_key_size: *mut u32
+) -> sgx_status_t {
+    let mut enclave_state = singleton().inner.lock().unwrap();
+    let pub_key_slice = enclave_state.rsa_pub_key.to_public_key_pem();
+    pkcs1::ToRsaPublicKey::to_pkcs1_pem(&pub_key_slice);
+    sgx_status_t::SGX_SUCCESS
 }
 
 #[no_mangle]
@@ -296,16 +323,10 @@ pub extern "C" fn ec_auth_oauth(
         }
     };
     info(&format!("oauth code is {}", &code));
-    let oauth_result = match auth_type {
-        1 => google_oauth(&enclave_state.config.oauth.google, code),
-        /* 
-        2 => twitter_oauth(&enclave_state.config, code),
-        3 => discord_oauth(&enclave_state.config, code),
-        4 => telegram_oauth(&enclave_state.config, code),
-        */
-        5 => github_oauth(&enclave_state.config.oauth.github, code),
-        _ => Err(GenericError::from("error type"))
-    };
+    let oauth_result = oauth::oauth_worker(
+        auth_type, 
+        &enclave_state.config.oauth, 
+        &code);
     if oauth_result.is_err() {
         return sgx_status_t::SGX_ERROR_INVALID_FUNCTION;
     }
@@ -420,45 +441,7 @@ pub extern "C" fn ec_sign_auth_jwt(
         audience: "sample_client".to_string(),
         exp: exp,
     };
-    let pem_key = br###"-----BEGIN RSA PRIVATE KEY-----
-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
------END RSA PRIVATE KEY-----"###;  
+    let pem_key = enclave_state.config.sign_prv.as_bytes();
     let key = EncodingKey::from_rsa_pem(pem_key).unwrap();
     let token = encode(
         &Header::new(Algorithm::RS256), 

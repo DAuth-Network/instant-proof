@@ -67,7 +67,8 @@ pub struct AppState {
     pub enclave: SgxEnclave,
     pub thread_pool: rayon::ThreadPool,
     pub db_pool: Pool,
-    pub clients: Vec<Client>
+    pub clients: Vec<Client>,
+    pub sign_pub: String, // get from sgx
     // pub conf: HashMap<String, String>
 }
 
@@ -538,6 +539,7 @@ pub struct Jwk {
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("dauth sdk is up and running");
+    let pub_k = endex.sign_pub.clone();
     let jwk = Jwk {
         e: "AQAB".to_string(),
         kty: "RSA".to_string(),

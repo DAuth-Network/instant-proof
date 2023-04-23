@@ -10,14 +10,6 @@ pub struct Api {
     pub workers: u16,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DbConfig1 {
-    pub host: String,
-    pub name: String,
-    pub password: String,
-    pub port: u16,
-    pub user: String,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DbConfig {

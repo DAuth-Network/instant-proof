@@ -95,6 +95,11 @@ enclave {
             [out] uint32_t* token_size
         );
 
+        public sgx_status_t ec_get_sign_pub_key(
+            [out, size=2048]uint8_t* pub_key,
+            [out] uint32_t* pub_key_size
+        );
+
         public sgx_status_t ec_test();
         
     };

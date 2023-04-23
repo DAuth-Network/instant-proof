@@ -29,6 +29,7 @@ pub struct OAuth {
 pub struct TeeConfig {
     pub email: Email,
     pub oauth: OAuth,
+    pub sign_prv: String,
 }
 
 impl TeeConfig {
@@ -37,7 +38,8 @@ impl TeeConfig {
             email: Email::default(),
             oauth: OAuth { 
                 github: OAuthClient::default(), 
-                google: OAuthClient::default() }
+                google: OAuthClient::default() },
+            sign_prv: emp(),
         }
     }
 }
