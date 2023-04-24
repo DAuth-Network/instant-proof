@@ -571,7 +571,7 @@ fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
 
 fn get_client_name(clients: &Vec<Client>, client_id: &str, headers: &HeaderMap) -> Option<String> {
     for client in clients {
-        info!("comparing {}", &client.client_id);
+        debug!("comparing {}", &client.client_id);
         if client.client_id == client_id {
             let origin_v = headers.get(ORIGIN);
             if origin_v.is_none() {
@@ -579,6 +579,7 @@ fn get_client_name(clients: &Vec<Client>, client_id: &str, headers: &HeaderMap) 
                 return None
             }
             let origin = origin_v.unwrap().to_str().unwrap();
+            debug!("comparing origin {} {}",origin, client.client_origin);
             if origin.eq(&client.client_origin) {
                 return Some(client.client_name.clone());
             } else {

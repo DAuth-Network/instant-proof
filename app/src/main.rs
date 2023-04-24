@@ -10,7 +10,7 @@ use actix_cors::Cors;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
 
-use log::{error, info, warn};
+use log::{error, info, warn, debug};
 extern crate sgx_types;
 extern crate sgx_urts;
 use sgx_types::*;
