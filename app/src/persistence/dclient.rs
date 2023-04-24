@@ -15,7 +15,7 @@ pub fn query_client(
 ) -> GenericResult<Vec<Client>> {
     let mut result: Vec<Client> = Vec::new();
     let mut conn = pool.get_conn()?;
-    let stmt = "select client_name, client_origin, client_id from client";
+    let stmt = "select client_name, client_id, client_origin from client";
     conn.query_iter(stmt)?.for_each(|row| {
         let r :(
             std::string::String,
