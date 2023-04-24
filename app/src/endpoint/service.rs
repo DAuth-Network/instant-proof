@@ -584,7 +584,7 @@ fn get_client_name(
     clients: &Vec<Client>, 
     client_id: &str, 
     headers: &HeaderMap,
-    env: Env
+    env: &Env
 ) -> Option<String> {
     for client in clients {
         debug!("comparing {}", &client.client_id);
