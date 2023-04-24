@@ -1,6 +1,7 @@
 extern crate openssl;
 #[macro_use]
 use std::str;
+use std::sync::Arc;
 use actix_http::header::{HeaderMap, ORIGIN};
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
@@ -22,6 +23,7 @@ use crate::endpoint::session;
 
 use super::err::DAuthError;
 use super::session::SessionState;
+use super::config::*;
 
 static SUCC: &'static str = "success";
 static FAIL: &'static str = "fail";
@@ -67,7 +69,8 @@ pub struct AppState {
     pub enclave: SgxEnclave,
     pub thread_pool: rayon::ThreadPool,
     pub db_pool: Pool,
-    pub clients: Vec<Client>
+    pub clients: Vec<Client>,
+    pub env: Env,
     // pub conf: HashMap<String, String>
 }
 
@@ -108,7 +111,9 @@ pub async fn exchange_key(
     let pool = &endex.thread_pool;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     // remove 04 from pub key
-    if get_client_name(&endex.clients, &req.client_id, &http_req.headers()).is_none() {
+    if get_client_name(
+        &endex.clients, &req.client_id, &http_req.headers(), &endex.env
+    ).is_none() {
         return fail_resp(DAuthError::ClientError);
     }
     let user_key_r = hex::decode(&req.key[2..]);
@@ -169,7 +174,9 @@ pub async fn auth_email(
     let client_name = get_client_name(
         &endex.clients, 
         &req.client_id,
-        &http_req.headers());
+        &http_req.headers(),
+        &endex.env
+    );
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -248,7 +255,9 @@ pub async fn auth_email_confirm(
     let client_name = get_client_name(
         &endex.clients, 
         &req.client_id,
-        &http_req.headers());
+        &http_req.headers(),
+        &endex.env
+    );
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -364,7 +373,9 @@ pub async fn auth_oauth(
     let client_name = get_client_name(
         &endex.clients, 
         &req.client_id,
-        &http_req.headers());
+        &http_req.headers(),
+        &endex.env
+    );
     if client_name.is_none() {
         return fail_resp(DAuthError::ClientError);
     }
@@ -569,22 +580,34 @@ fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
 }
 
 
-fn get_client_name(clients: &Vec<Client>, client_id: &str, headers: &HeaderMap) -> Option<String> {
+fn get_client_name(
+    clients: &Vec<Client>, 
+    client_id: &str, 
+    headers: &HeaderMap,
+    env: Env
+) -> Option<String> {
     for client in clients {
         debug!("comparing {}", &client.client_id);
         if client.client_id == client_id {
-            let origin_v = headers.get(ORIGIN);
-            if origin_v.is_none() {
-                error!("origin is none");
-                return None
-            }
-            let origin = origin_v.unwrap().to_str().unwrap();
-            debug!("comparing origin {} {}",origin, client.client_origin);
-            if origin.eq(&client.client_origin) {
-                return Some(client.client_name.clone());
-            } else {
-                error!("origin not match");
-                return None;
+            match env {
+                Env::PROD => {
+                    let origin_v = headers.get(ORIGIN);
+                    if origin_v.is_none() {
+                        error!("origin is none");
+                        return None
+                    }
+                    let origin = origin_v.unwrap().to_str().unwrap();
+                    debug!("comparing origin {} {}",origin, client.client_origin);
+                    if origin.eq(&client.client_origin) {
+                        return Some(client.client_name.clone());
+                    } else {
+                        error!("origin not match");
+                        return None;
+                    }        
+                }, 
+                _ => {
+                    return Some(client.client_name.clone());
+                }
             }
         }
     }

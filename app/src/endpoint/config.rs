@@ -1,5 +1,21 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
+pub enum Env {
+    DEV,
+    PROD,
+}
+
+impl Env {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "dev" => Some(Self::DEV),
+            "prod" => Some(Self::PROD),
+            _ => None
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Api {
     pub env: String,

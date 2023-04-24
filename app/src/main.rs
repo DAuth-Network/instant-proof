@@ -128,7 +128,8 @@ async fn main() -> std::io::Result<()> {
         enclave: init_enclave_and_set_conf(conf.to_tee_config()),
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
-        clients: query_client(&client_db).unwrap()
+        clients: query_client(&client_db).unwrap(),
+        env: Env::from_str(&conf.api.env)
         // conf: conf.clone()
     });
     // ustate stores user state information e.g. confirmation code that sends
