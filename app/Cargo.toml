@@ -27,7 +27,7 @@ hex = "=0.4.3"
 log = "0.4"
 log4rs = "=1.1.1"
 mysql = "*"
-config = "0.13.1"
+config = "=0.13.1"
 rand = "0.8.5"
 jsonwebtoken = "8"
 web3 = "=0.18.0"
@@ -37,6 +37,10 @@ chrono = "=0.4.24"
 http_req = "=0.9.0"
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 rayon = "=1.7.0"
+pest_meta = "=2.5.6"
+pest = "=2.5.6"
+pest_generator = "=2.5.6"
+
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }
