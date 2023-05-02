@@ -93,7 +93,7 @@ fn singleton() -> &'static SingletonReader {
                     pub_k_r1: sgx_utils::key_to_bigendian(&pub_k),
                     pub_k_k1: pub_k1.serialize(),
                     sessions: Sessions::new(prv_k),
-                    config: config::TeeConfig::default()
+                    config: config::TeeConfig::default(),
                 }),
             };
             // Store it to the static var, i.e. initialize it
@@ -420,45 +420,7 @@ pub extern "C" fn ec_sign_auth_jwt(
         audience: "sample_client".to_string(),
         exp: exp,
     };
-    let pem_key = br###"-----BEGIN RSA PRIVATE KEY-----
-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
------END RSA PRIVATE KEY-----"###;  
+    let pem_key = enclave_state.config.rsa_key.as_bytes();  
     let key = EncodingKey::from_rsa_pem(pem_key).unwrap();
     let token = encode(
         &Header::new(Algorithm::RS256), 

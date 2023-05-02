@@ -4,6 +4,7 @@ extern crate log;
 extern crate log4rs;
 
 use std::str;
+use std::env;
 
 use actix_web::{dev::Service as _, web, App, HttpServer};
 use actix_cors::Cors;
@@ -125,7 +126,11 @@ async fn main() -> std::io::Result<()> {
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
     let edata: web::Data<AppState> = web::Data::new(AppState{
-        enclave: init_enclave_and_set_conf(conf.to_tee_config()),
+        enclave: init_enclave_and_set_conf(
+            conf.to_tee_config(
+                env::var("RSA_KEY").unwrap(),
+                env::var("SEAL_KEY").unwrap(),
+        )),
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_client(&client_db).unwrap(),

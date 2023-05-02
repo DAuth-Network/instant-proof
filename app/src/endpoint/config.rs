@@ -83,13 +83,17 @@ pub struct DauthConfig {
 pub struct TeeConfig {
     pub email: Email,
     pub oauth: OAuth,
+    pub rsa_key: String,
+    pub seal_key: String
 }
 
 impl DauthConfig {
-    pub fn to_tee_config(&self) -> TeeConfig {
+    pub fn to_tee_config(&self, rsa_key: String, seal_key: String) -> TeeConfig {
         TeeConfig {
             email: self.email.clone(),
             oauth: self.oauth.clone(),
+            rsa_key: rsa_key,
+            seal_key: seal_key
         }
     }
 }

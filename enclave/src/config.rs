@@ -25,11 +25,15 @@ pub struct OAuth {
     pub google: OAuthClient,
 }
 
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
     pub email: Email,
     pub oauth: OAuth,
+    pub rsa_key: String,
+    pub seal_key: String
 }
+
 
 impl TeeConfig {
     pub fn default() -> Self {
@@ -37,7 +41,9 @@ impl TeeConfig {
             email: Email::default(),
             oauth: OAuth { 
                 github: OAuthClient::default(), 
-                google: OAuthClient::default() }
+                google: OAuthClient::default() },
+            rsa_key: emp(),
+            seal_key: emp(),
         }
     }
 }
