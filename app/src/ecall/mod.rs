@@ -96,6 +96,13 @@ extern {
         token_size: *mut u32
     ) -> sgx_status_t;
 
+    pub fn ec_get_sign_pub_key(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        pub_key: &mut [u8;2048],
+        pub_key_size: *mut u32
+    ) -> sgx_status_t;
+
     pub fn ec_test(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,

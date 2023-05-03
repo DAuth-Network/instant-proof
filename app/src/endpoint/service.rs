@@ -67,6 +67,7 @@ fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
 #[derive(Debug)]
 pub struct AppState {
     pub enclave: SgxEnclave,
+    pub rsa_pub_key: RSAPublicKey,
     pub thread_pool: rayon::ThreadPool,
     pub db_pool: Pool,
     pub clients: Vec<Client>,
@@ -534,33 +535,18 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwksResp {
-    keys: Vec<Jwk>
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Jwk {
-    kty: String,
-    e: String,
-    kid: String,
-    n: String
+    keys: Vec<RSAPublicKey>
 }
 
 #[get("/jwks.json")]
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
-    info!("dauth sdk is up and running");
-    let jwk = Jwk {
-        e: "AQAB".to_string(),
-        kty: "RSA".to_string(),
-        kid: "e4704eeb-9e00-4ef6-8561-cb54927990c0".to_string(),
-        n: "sVOK7r90J0uJQFLlLq1XlrFhcH7xurhMY_LDWRNR9GYx6QGj-x6qOV68jVkOB4d0O3_tbowONtoKTghNLyfN2l4gDurwUcc7JkEvr6kXGG4Hz2tiM4qpWkvE9YTFliLGKYGC4Izx6UEkLpMDHfTfJKonflIJ6QOoJl7mAGjBcONcPz3FZxqTJEdDFjvps6Qun3mhMV3IYTdsQlBuGw7v8XVGUXta0jTSpqT_b3qYKFjYm1m8_fuG5dK0GOEhVrJBgXa54LprqDismKECBxEI1FT9lsZ9TTS0XNhgGpxGNapdq8--chwGPQTtm-f2lk_G0DJmHtIaYM24XZpQIuHtYSEBkKlDCWnxm4c69Apem-lSV4vUR5gzHQF1B2XNmTpjxnAuSkAhBWrkka2qMsfZprJenCGG1g60bhvBlxhGmcvISoHb1HpUMHZQaotqhHnfZmmgj_ilpqIJc8580bRhD3u_3FZV1v1IuHT-fb0hGgb6c_e94d3xGJCUlX6Xs5cv".to_string(),
-    };
+    info!("get rsa pub key");
+    let pub_key = endex.rsa_pub_key;
     json_resp(JwksResp {
         keys: vec![jwk]
     })
 }
-
-
 
 fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
     let session_id_b_r = hex::decode(session_id);

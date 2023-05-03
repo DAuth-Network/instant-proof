@@ -10,6 +10,9 @@ use actix_web::{dev::Service as _, web, App, HttpServer};
 use actix_cors::Cors;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use actix_files as afs;
+use jsonwebkey_convert::*;
+use jsonwebkey_convert::der::FromPem;
+
 
 use log::{error, info, warn, debug};
 extern crate sgx_types;
@@ -89,6 +92,34 @@ fn init_enclave_and_set_conf(conf: TeeConfig) -> SgxEnclave {
 }
 
 
+/// Create enclave instance and generate key pairs inside tee
+/// for secure communication
+/* 
+fn get_rsa_pub_key(enclave: SgxEnclave) -> Result<String> {
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    let mut rsa_pub_key = [0u8; 2048];
+    let result = unsafe {
+        ecall::ec_get_sign_pub_key(
+            enclave.geteid(),
+            &mut sgx_result,
+            &mut rsa_pub_key,
+            rsa_pub_key_size
+        );
+    };
+    match result {
+        sgx_status_t::SGX_SUCCESS => {
+            println!("set config in sgx done.");
+        },
+        _ => panic!("Enclave generate key-pair failed!")
+    }
+    return enclave;
+}
+*/
+
+fn parse_jwk(rsa_pub_key: String) -> RSAPublicKey {
+    jsonwebkey_convert::RSAPublicKey::from_pem(rsa_pub_key).unwrap()
+}
+
 /// Create database connection pool using conf from config file 
 fn init_db_pool(conf: &DbConfig) -> Pool {
     let db_user = &conf.user;
@@ -125,12 +156,15 @@ async fn main() -> std::io::Result<()> {
     let pool = rayon::ThreadPoolBuilder::new().num_threads(workers).build().unwrap();
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
+    let enclave = init_enclave_and_set_conf(
+        conf.to_tee_config(
+            env::var("RSA_KEY").unwrap(),
+            env::var("SEAL_KEY").unwrap(),
+    ));
+    let rsa_pub_key = parse_jwk(env::var("RSA_PUB_KEY").unwrap());
     let edata: web::Data<AppState> = web::Data::new(AppState{
-        enclave: init_enclave_and_set_conf(
-            conf.to_tee_config(
-                env::var("RSA_KEY").unwrap(),
-                env::var("SEAL_KEY").unwrap(),
-        )),
+        enclave: enclave,
+        rsa_pub_key: rsa_pub_key,
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_client(&client_db).unwrap(),

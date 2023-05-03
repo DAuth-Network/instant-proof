@@ -439,6 +439,17 @@ pub extern "C" fn ec_sign_auth_jwt(
     sgx_status_t::SGX_SUCCESS
 }
 
+#[no_mangle]
+pub extern "C" fn ec_get_sign_pub_key(
+    pub_key: &mut[u8;2048],
+    pub_key_size: *mut u32
+) -> sgx_status_t {
+    let mut enclave_state = singleton().inner.lock().unwrap();
+    let pub_key_slice = enclave_state.rsa_pub_key.to_public_key_pem();
+    pkcs1::ToRsaPublicKey::to_pkcs1_pem(&pub_key_slice);
+    sgx_status_t::SGX_SUCCESS
+}
+
 
 #[no_mangle]
 pub extern "C" fn ec_close_session(
