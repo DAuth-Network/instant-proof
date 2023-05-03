@@ -16,10 +16,9 @@ enclave {
         );
 
 		public sgx_status_t ec_set_conf(
-            [in, size=1024]uint8_t* config_b, 
+            [in, size=8192]uint8_t* config_b, 
             int config_b_size
         );
-
 
         public sgx_status_t ec_close_session(
             [in, size=32]uint8_t* session_id

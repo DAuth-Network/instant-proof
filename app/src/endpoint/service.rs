@@ -8,6 +8,7 @@ use serde_derive::{Deserialize, Serialize};
 use actix_web::{
     get, post, web, HttpResponse, HttpRequest, Responder 
 };
+use jsonwebkey_convert::*;
 use log::{error, info};
 extern crate sgx_types;
 extern crate sgx_urts;
@@ -542,9 +543,9 @@ pub struct JwksResp {
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("get rsa pub key");
-    let pub_key = endex.rsa_pub_key;
+    let pub_key = endex.rsa_pub_key.clone();
     json_resp(JwksResp {
-        keys: vec![jwk]
+        keys: vec![pub_key]
     })
 }
 
