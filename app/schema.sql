@@ -17,11 +17,11 @@ create table auth (
     acc_hash varchar(128),
     auth_id int not null,  /* auth seq or nonce */
     auth_type varchar(20),
-    audience varchar(128),
+    audience varchar(128), /* client_name*/
     auth_datetime datetime,
     auth_exp SERIAL,
     INDEX i_date using btree(auth_datetime),
-    INDEX i_account using btree(acc_hash),
+    INDEX i_account using hash(acc_hash),
     PRIMARY KEY(acc_hash, auth_id)
 )
 ROW_FORMAT=COMPRESSED
