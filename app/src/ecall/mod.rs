@@ -26,16 +26,6 @@ extern {
         session_id: &[u8;32]
     ) -> sgx_status_t;
 
-    pub fn ec_seal(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        value: *const u8,
-        value_size: usize,
-        value_hash: &mut[u8;32],
-        value_seal: &mut [u8;1024],
-        value_seal_size: *mut u32
-    ) -> sgx_status_t;
-
     pub fn ec_send_cipher_email(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,

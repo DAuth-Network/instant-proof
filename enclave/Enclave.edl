@@ -59,13 +59,6 @@ enclave {
             [out, size=1024]uint8_t* value_seal,
             [out] uint32_t* value_seal_size
         );
-
-        public sgx_status_t ec_auth_email_confirm(
-            [in, size=32]uint8_t* session_id,
-            [in, size=code_size]uint8_t* cipher_code,
-            int code_size,
-            [out, size=32]uint8_t* email_hash
-        );
         
         public sgx_status_t ec_auth_oauth(
             [in, size=32]uint8_t* session_id,

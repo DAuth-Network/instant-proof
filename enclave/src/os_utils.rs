@@ -96,7 +96,7 @@ fn encode_hex_digit(digit: u8) -> char {
     }
 }
 
-pub fn decode_hex(hex: &str) -> Vec<u8> {
+pub fn decode_hex(hex: &str) -> GenericResult<Vec<u8>> {
     let mut r: Vec<u8> = Vec::new();
     let mut chars = hex.chars().enumerate();
     loop {
@@ -108,19 +108,19 @@ pub fn decode_hex(hex: &str) -> Vec<u8> {
             continue;
         }
         let (_, second) = match chars.next() {
-            None => panic!("pos = {}d", pos),
+            None => return Err(GenericError::from("decode error")),
             Some(elt) => elt,
         };
-        r.push((decode_hex_digit(first) << 4) | decode_hex_digit(second));
+        r.push((decode_hex_digit(first)? << 4) | decode_hex_digit(second)?);
     }
-    r
+    Ok(r)
 }
 
-fn decode_hex_digit(digit: char) -> u8 {
+fn decode_hex_digit(digit: char) -> GenericResult<u8> {
     match digit {
-        '0'..='9' => digit as u8 - '0' as u8,
-        'a'..='f' => digit as u8 - 'a' as u8 + 10,
-        'A'..='F' => digit as u8 - 'A' as u8 + 10,
-        _ => panic!(),
+        '0'..='9' => Ok(digit as u8 - '0' as u8),
+        'a'..='f' => Ok(digit as u8 - 'a' as u8 + 10),
+        'A'..='F' => Ok(digit as u8 - 'A' as u8 + 10),
+        _ => Err(GenericError::from("decode error")),
     }
 }

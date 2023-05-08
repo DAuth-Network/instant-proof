@@ -2,13 +2,16 @@ use sgx_tcrypto::*;
 use sgx_types::*;
 use std::vec::Vec;
 use std::slice;
-
+use std::string::{String, ToString};
 use sgx_tseal::{SgxSealedData, SgxUnsealedData};
 
 use std::convert::TryInto;
 
+use crate::os_utils;
+
 use super::err::*;
 use super::log::*;
+use super::os_utils::*;
 
 pub fn pub_k_from_user(user_key: &[u8;64]) -> sgx_ec256_public_t {
     let mut gx: [u8;32] = user_key[0..32].try_into().unwrap();
@@ -182,6 +185,13 @@ pub fn rand() -> u32 {
     return six_digits;
 }
 
+// when using seal, sgx generates a seal_key using cpu and sgx signing key
+// when using iseal, sgx use config key
+pub fn i_seal(plain_binary: &[u8], key: &String) -> GenericResult<Vec<u8>> {
+    let key_b = os_utils::decode_hex(&key)?;
+    let key_b_128: [u8;16] = key_b.try_into().unwrap();
+    Ok(encrypt(&key_b_128, plain_binary))
+}
 
 pub fn seal(plain_binary: &[u8]) -> ([u8;1024],u32) {
     let aad: [u8; 0] = [0_u8; 0];

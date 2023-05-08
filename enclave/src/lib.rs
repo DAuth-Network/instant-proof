@@ -234,13 +234,25 @@ pub extern "C" fn ec_confirm_email(
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     //when code input equals to code sent, seal email and hash email
-    let (sealed, len) = sgx_utils::seal(session.data.as_bytes());
+    let sealed_r = sgx_utils::i_seal(
+        session.data.as_bytes(),
+        &enclave_state.config.seal_key
+    );
+    let sealed = match sealed_r {
+        Ok(r) => r,
+        Err(_) => {
+            error("seal email failed");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
+    let sealed_len = sealed.len();
     let raw_hashed = sgx_utils::hash(session.data.as_bytes()).unwrap();
     info(&format!("email seal {:?}", sealed));
     info(&format!("email hash {:?}", raw_hashed));
     *email_hash = raw_hashed;
-    *email_seal = sealed;
-    unsafe {*email_seal_size = len};
+    let sealed_1024: [u8;1024] = sealed.try_into().unwrap();
+    *email_seal = sealed_1024;
+    unsafe {*email_seal_size = sealed_len.try_into().unwrap()};
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -315,53 +327,25 @@ pub extern "C" fn ec_auth_oauth(
         auth_account, 
         auth_type.to_string());
     info(&format!("auth account is {}", &auth_account_with_type));
-    let (sealed, len) = sgx_utils::seal(auth_account_with_type.as_bytes());
+    let sealed_r = sgx_utils::i_seal(
+        auth_account_with_type.as_bytes(),
+        &enclave_state.config.seal_key
+    );
+    let sealed = match sealed_r {
+        Ok(r) => r,
+        Err(_) => {
+            error("seal oauth failed");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
+    let sealed_len = sealed.len();
     let raw_hashed = sgx_utils::hash(auth_account.as_bytes()).unwrap();
     info(&format!("auth account seal {:?}", sealed));
     info(&format!("auth account hash {:?}", raw_hashed));
     *auth_hash = raw_hashed;
-    *auth_seal = sealed;
-    unsafe {*auth_seal_size = len};
-    sgx_status_t::SGX_SUCCESS
-}
-
-
-#[no_mangle]
-pub extern "C" fn ec_auth_email_confirm(
-    session_id: &[u8;32],
-    cipher_code: *const u8,
-    code_size: usize,
-    email_hash: &mut[u8;32]
-) -> sgx_status_t {
-    let code_slice = unsafe { slice::from_raw_parts(cipher_code, code_size) };
-    info(&format!("code {:?}", &code_slice));
-    // set tee_key
-    let mut enclave_state = singleton().inner.lock().unwrap();
-    let session_r = enclave_state.sessions.get_session(session_id);
-    if session_r.is_none() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let session = session_r.unwrap();
-    let code_bytes_r = session.decrypt(code_slice);
-    if code_bytes_r.is_err() {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let code_bytes = code_bytes_r.unwrap();
-    let code = match str::from_utf8(&code_bytes) {
-        Ok(r) => r,
-        Err(_) => {
-            info(&format!("decrypt bytes to str failed"));
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-        }
-    };
-    info(&format!("code is {}", &code));
-    if !code.eq(&session.code.to_string()) {
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    //when code input equals to code sent, seal email and hash email
-    let (sealed, len) = sgx_utils::seal(session.data.as_bytes());
-    let raw_hashed = sgx_utils::hash(session.data.as_bytes()).unwrap();
-    *email_hash = raw_hashed;
+    let sealed_1024: [u8;1024] = sealed.try_into().unwrap();
+    *auth_seal = sealed_1024;
+    unsafe {*auth_seal_size = sealed_len.try_into().unwrap()};
     sgx_status_t::SGX_SUCCESS
 }
 
