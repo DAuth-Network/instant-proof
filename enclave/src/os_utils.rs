@@ -124,3 +124,33 @@ fn decode_hex_digit(digit: char) -> GenericResult<u8> {
         _ => Err(GenericError::from("decode error")),
     }
 }
+
+#[test]
+fn test_encode_hex() {
+    let bytes = [0x01, 0x02, 0x03];
+    let expected_hex = "010203";
+    let actual_hex = encode_hex(&bytes);
+    assert_eq!(expected_hex, actual_hex);
+}
+
+#[test]
+fn test_decode_hex() {
+    let hex = "010203";
+    let expected_bytes = [0x01, 0x02, 0x03];
+    let actual_bytes = decode_hex(&hex).unwrap();
+    assert_eq!(expected_bytes, actual_bytes.as_slice());
+}
+
+#[test]
+fn test_decode_hex_with_spaces() {
+    let hex = "01 02 03";
+    let expected_bytes = [0x01, 0x02, 0x03];
+    let actual_bytes = decode_hex(&hex).unwrap();
+    assert_eq!(expected_bytes, actual_bytes.as_slice());
+}
+
+#[test]
+fn test_decode_hex_with_invalid_characters() {
+    let hex = "010203abc";
+    assert!(decode_hex(&hex).is_err());
+}

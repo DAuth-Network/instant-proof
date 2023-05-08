@@ -72,3 +72,58 @@ impl Email {
 fn emp() -> String {
     "".to_string()
 }
+
+#[test]
+fn test_email_creation() {
+    let email = Email {
+        account: "example@example.com".to_string(),
+        password: "password".to_string(),
+        sender: "John Doe".to_string(),
+        server: "localhost".to_string(),
+    };
+    assert_eq!(email.account, "example@example.com");
+    assert_eq!(email.password, "password");
+    assert_eq!(email.sender, "John Doe");
+    assert_eq!(email.server, "localhost");
+}
+
+#[test]
+fn test_oauth_client_creation() {
+    let oauth_client = OAuthClient {
+        client_id: "client_id".to_string(),
+        client_secret: "client_secret".to_string(),
+        redirect_url: "redirect_url".to_string(),
+    };
+    assert_eq!(oauth_client.client_id, "client_id");
+    assert_eq!(oauth_client.client_secret, "client_secret");
+    assert_eq!(oauth_client.redirect_url, "redirect_url");
+}
+
+#[test]
+fn test_oauth_creation() {
+    let oauth = OAuth {
+        github: OAuthClient::default(),
+        google: OAuthClient::default(),
+    };
+    assert_eq!(oauth.github.client_id, "");
+    assert_eq!(oauth.github.client_secret, "");
+    assert_eq!(oauth.github.redirect_url, "");
+}
+
+#[test]
+fn test_tee_config_creation() {
+    let tee_config = TeeConfig {
+        email: Email::default(),
+        oauth: OAuth {
+            github: OAuthClient::default(),
+            google: OAuthClient::default(),    
+        },
+        rsa_key: "".to_string(),
+        seal_key: "".to_string(),
+    };
+    assert_eq!(tee_config.email.account, "");
+    assert_eq!(tee_config.oauth.github.client_id, "");
+    assert_eq!(tee_config.rsa_key, "");
+    assert_eq!(tee_config.seal_key, "");
+}
+
