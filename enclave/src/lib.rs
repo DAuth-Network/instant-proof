@@ -250,7 +250,8 @@ pub extern "C" fn ec_confirm_email(
     info(&format!("email seal {:?}", sealed));
     info(&format!("email hash {:?}", raw_hashed));
     *email_hash = raw_hashed;
-    let sealed_1024: [u8;1024] = sealed.try_into().unwrap();
+    let mut sealed_1024: [u8;1024] = [0;1024];
+    sealed_1024[..sealed_len].copy_from_slice(&sealed);
     *email_seal = sealed_1024;
     unsafe {*email_seal_size = sealed_len.try_into().unwrap()};
     sgx_status_t::SGX_SUCCESS

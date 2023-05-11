@@ -116,10 +116,12 @@ pub async fn exchange_key(
     if get_client_name(
         &endex.clients, &req.client_id, &http_req.headers(), &endex.env
     ).is_none() {
+        info!("client id not found");
         return fail_resp(DAuthError::ClientError);
     }
     let user_key_r = hex::decode(&req.key[2..]);
     if user_key_r.is_err() {
+        info!("user pub key invalid");
         return fail_resp(DAuthError::DataError);
     }
     let user_key: [u8;64] = user_key_r.unwrap().try_into().unwrap();
