@@ -27,15 +27,6 @@ pub struct Api {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DbConfig1 {
-    pub host: String,
-    pub name: String,
-    pub password: String,
-    pub port: u16,
-    pub user: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DbConfig {
     pub host: String,
     pub name: String,
@@ -46,6 +37,14 @@ pub struct DbConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Email {
+    pub account: String,
+    pub password: String,
+    pub sender: String,
+    pub server: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Sms {
     pub account: String,
     pub password: String,
     pub sender: String,
@@ -76,6 +75,7 @@ pub struct DauthConfig {
     pub api: Api,
     pub db: Db,
     pub email: Email,
+    pub sms: Sms,
     pub oauth: OAuth,
 }
 
@@ -83,6 +83,7 @@ pub struct DauthConfig {
 pub struct TeeConfig {
     pub email: Email,
     pub oauth: OAuth,
+    pub sms: Sms,
     pub rsa_key: String,
     pub seal_key: String
 }
@@ -91,9 +92,10 @@ impl DauthConfig {
     pub fn to_tee_config(&self, rsa_key: String, seal_key: String) -> TeeConfig {
         TeeConfig {
             email: self.email.clone(),
+            sms: self.sms.clone(),
             oauth: self.oauth.clone(),
             rsa_key: rsa_key,
-            seal_key: seal_key
+            seal_key: seal_key,
         }
     }
 }

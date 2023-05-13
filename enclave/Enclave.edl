@@ -52,6 +52,22 @@ enclave {
             [out] uint32_t* seal_size
         );
 
+        public sgx_status_t ec_send_cipher_sms(
+            [in, size=32]uint8_t* session_id,
+            [in, size=cipher_sms_size]uint8_t* cipher_sms,
+            int cipher_sms_size
+        );
+
+        public sgx_status_t ec_confirm_sms(
+            [in, size=32]uint8_t* session_id,
+            [in, size=code_size]uint8_t* cipher_code,
+            int code_size,
+            [out, size=32]uint8_t* sms_hash,
+            [out, size=1024]uint8_t* sms_seal,
+            [out] uint32_t* sms_seal_size
+        );
+
+
         public sgx_status_t ec_seal(
             [in, size=value_size]uint8_t* value,
             int value_size,
@@ -83,6 +99,7 @@ enclave {
             [in, size=32]uint8_t* a_hash,
             int a_seq,
             uint64_t auth_exp,
+            [in, string]char* request_id,
             [out, size=2048]uint8_t* token,
             [out] uint32_t* token_size
         );

@@ -199,6 +199,8 @@ async fn main() -> std::io::Result<()> {
                 .service(auth_email)
                 .service(auth_email_confirm)
                 .service(auth_oauth)
+                .service(auth_sms)
+                .service(auth_sms_confirm)
                 .service(jwks)
                 .service(health)
             );

@@ -108,7 +108,7 @@ pub fn github_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String>{
     Ok(v2["id"].clone().to_string())
 }
 
-fn http_req(
+pub fn http_req(
     url: &str, 
     method: Method,
     body: Option<String>, 

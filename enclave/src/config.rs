@@ -11,6 +11,15 @@ pub struct Email {
     pub server: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Sms {
+    pub account: String,
+    pub password: String,
+    pub sender: String,
+    pub server: String,
+}
+
+
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuthClient {
@@ -30,6 +39,7 @@ pub struct OAuth {
 pub struct TeeConfig {
     pub email: Email,
     pub oauth: OAuth,
+    pub sms: Sms,
     pub rsa_key: String,
     pub seal_key: String
 }
@@ -39,6 +49,7 @@ impl TeeConfig {
     pub fn default() -> Self {
         Self {
             email: Email::default(),
+            sms: Sms::default(),
             oauth: OAuth { 
                 github: OAuthClient::default(), 
                 google: OAuthClient::default() },
@@ -68,6 +79,18 @@ impl Email {
         }
     }
 }
+
+impl Sms {
+    fn default() -> Self {
+        Self {
+            account: emp(),
+            password: emp(),
+            sender: emp(),
+            server: emp(),
+        }
+    }
+}
+
 
 fn emp() -> String {
     "".to_string()

@@ -3,6 +3,7 @@ extern crate openssl;
 use std::str;
 use std::sync::Arc;
 use actix_http::header::{HeaderMap, ORIGIN};
+use http_req::request;
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{
@@ -163,6 +164,7 @@ pub struct AuthEmailReq {
     client_id: String,
     session_id: String,
     cipher_email: String,
+    request_id: Option<String>
 }
 
 // with BaseResp
@@ -238,7 +240,8 @@ pub async fn auth_email(
 pub struct AuthEmailConfirmReq {
     client_id: String,
     session_id: String,
-    cipher_code: String
+    cipher_code: String,
+    request_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -321,6 +324,7 @@ pub async fn auth_email_confirm(
     let account = Account {
         acc_hash: email_hash_hex.clone(),
         acc_seal: email_seal_hex,
+        auth_type: AuthType::Email
     };
     let insert_r = insert_account_if_new(&endex.db_pool, &account);
     if insert_r.is_err() {
@@ -328,6 +332,10 @@ pub async fn auth_email_confirm(
     }
     let a_id = query_latest_auth_id(&endex.db_pool, &account.acc_hash);
     let next_id = a_id + 1;
+    let request_id = match req.request_id {
+        Some(ref r) => r.clone(),
+        None => "".to_string(),
+    };
     let auth =  Auth {
         acc_hash: email_hash_hex.clone(),
         auth_id: next_id,
@@ -335,6 +343,208 @@ pub async fn auth_email_confirm(
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
         audience: client_name.unwrap(),
+        request_id: request_id,
+    };
+    let token_r = sign_auth_jwt(
+        e.geteid(), pool, &session_id_b ,&auth);
+    if token_r.is_err() {
+        return fail_resp(DAuthError::SgxError);
+    }
+    let token = token_r.unwrap();
+    let auth_r = insert_auth(&endex.db_pool, auth);
+    if auth_r.is_err() {
+        error!("insert auth failed {}", auth_r.err().unwrap());
+        return fail_resp(DAuthError::DbError);
+    }
+    json_resp(
+        AuthSuccessResp{
+            status: SUCC.to_string(),
+            cipher_token: token
+        }
+    )
+}
+
+#[derive(Deserialize)]
+pub struct AuthSmsReq {
+    client_id: String,
+    session_id: String,
+    cipher_sms: String,
+    request_id: Option<String>
+}
+
+// with BaseResp
+#[post("/auth_sms")]
+pub async fn auth_sms(
+    req: web::Json<AuthSmsReq>,
+    http_req: HttpRequest,
+    endex: web::Data<AppState>,
+    sessions: web::Data<session::SessionState>
+) -> HttpResponse {
+    info!("auth sms with session_id {}", &req.session_id);
+    // validate client
+    let client_name = get_client_name(
+        &endex.clients, 
+        &req.client_id,
+        &http_req.headers(),
+        &endex.env
+    );
+    if client_name.is_none() {
+        return fail_resp(DAuthError::ClientError);
+    }
+    // validate session
+    if !validate_session(&sessions, &req.session_id) {
+        close_ec_session(endex.enclave.geteid(), &req.session_id);
+        return fail_resp(DAuthError::SessionError);
+    }
+    let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
+    let sms_b_r = hex::decode(&req.cipher_sms);
+    if sms_b_r.is_err() {
+        info!("sms decode error");
+        return fail_resp(DAuthError::DataError);
+    }
+    let sms_b = sms_b_r.unwrap();
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    // sendmail
+    let pool = &endex.thread_pool;
+    let result = pool.install(|| {
+        unsafe {
+            ecall::ec_send_cipher_sms(
+                endex.enclave.geteid(), 
+                &mut sgx_result, 
+                &session_id_b,
+                sms_b.as_ptr() as *const u8,
+                sms_b.len(),
+            )
+        }
+    }); 
+    if !sgx_success(result) {
+        error!("unsafe call failed.");
+        return fail_resp(DAuthError::SgxError);
+    }
+    info!("sgx result {}", &sgx_result);
+    match sgx_result {
+        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
+            return fail_resp(DAuthError::SessionError);
+        },
+        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
+            return fail_resp(DAuthError::DataError);
+        },
+        sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE => {
+            return fail_resp(DAuthError::SendmailError);
+        },
+        sgx_status_t::SGX_SUCCESS => {
+            return succ_resp();
+        },
+        _ => {
+            error!("sgx return unknown error {}", sgx_result);
+            return fail_resp(DAuthError::SgxError);
+        },
+    }
+}
+
+#[derive(Deserialize)]
+pub struct AuthSmsConfirmReq {
+    client_id: String,
+    session_id: String,
+    cipher_code: String,
+    request_id: Option<String>,
+}
+
+
+#[post("/auth_sms_confirm")]
+pub async fn auth_sms_confirm(
+    req: web::Json<AuthSmsConfirmReq>,
+    http_req: HttpRequest,
+    endex: web::Data<AppState>,
+    sessions: web::Data<session::SessionState>
+) -> HttpResponse {
+    info!("register mail confirm with session_id {}", &req.session_id);
+    // validate client
+    let client_name = get_client_name(
+        &endex.clients, 
+        &req.client_id,
+        &http_req.headers(),
+        &endex.env
+    );
+    if client_name.is_none() {
+        return fail_resp(DAuthError::ClientError);
+    }
+    // verify session_id
+    if !validate_session(&sessions, &req.session_id) {
+        close_ec_session(endex.enclave.geteid(), &req.session_id);
+        return fail_resp(DAuthError::SessionError);
+    }
+    let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
+    let e = &endex.enclave;
+    let pool = &endex.thread_pool;
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    let code_b = hex::decode(&req.cipher_code).unwrap();
+
+    let mut sms_hash = [0_u8;32];
+    let mut sms_seal = [0_u8;1024];
+    let mut sms_seal_size = 0;
+    let result = pool.install(|| {
+        unsafe {
+            ecall::ec_confirm_email(
+                e.geteid(), 
+                &mut sgx_result, 
+                &session_id_b,
+                code_b.as_ptr() as *const u8,
+                code_b.len(),
+                &mut sms_hash,
+                &mut sms_seal,
+                &mut sms_seal_size,
+            )
+        }
+    });
+    if !sgx_success(result) {
+        error!("unsafe call failed.");
+        return fail_resp(DAuthError::SgxError);
+    }
+    match sgx_result {
+        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
+            return fail_resp(DAuthError::SessionError);
+        },
+        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
+            return fail_resp(DAuthError::DataError);
+        },
+        sgx_status_t::SGX_SUCCESS => {
+            info!("confirm mail success");
+        },
+        _ => {
+            error!("sgx return unknown error {}", sgx_result);
+            return fail_resp(DAuthError::SgxError);
+        },
+    }
+    let sms_hash_hex = hex::encode(sms_hash);
+    let size: usize = sms_seal_size.try_into().unwrap();
+    let sms_seal_hex = hex::encode(&sms_seal[..size]);
+    // after confirm mail success, if new email, insert_mail
+    // increase auth_hist
+    // return token
+    let account = Account {
+        acc_hash: sms_hash_hex.clone(),
+        acc_seal: sms_seal_hex,
+        auth_type: AuthType::Sms,
+    };
+    let insert_r = insert_account_if_new(&endex.db_pool, &account);
+    if insert_r.is_err() {
+        return fail_resp(DAuthError::DbError);
+    }
+    let a_id = query_latest_auth_id(&endex.db_pool, &account.acc_hash);
+    let next_id = a_id + 1;
+    let request_id = match &req.request_id {
+        Some(id) => id.clone(),
+        None => "".to_string(),
+    };
+    let auth =  Auth {
+        acc_hash: sms_hash_hex.clone(),
+        auth_id: next_id,
+        auth_type: AuthType::Email,
+        auth_datetime: utils::now_datetime().unwrap(),
+        auth_exp: utils::system_time() + 3600,
+        audience: client_name.unwrap(),
+        request_id: request_id
     };
     let token_r = sign_auth_jwt(
         e.geteid(), pool, &session_id_b ,&auth);
@@ -361,7 +571,8 @@ pub struct AuthOauthReq {
     client_id: String,
     session_id: String,
     cipher_code: String,
-    oauth_type: String
+    oauth_type: String,
+    request_id: Option<String>
 }
 
 
@@ -453,6 +664,7 @@ pub async fn auth_oauth(
     let auth_account = Account {
         acc_hash: auth_hash_hex.clone(),
         acc_seal: auth_seal_hex,
+        auth_type: auth_type,
     };
     let result = insert_account_if_new(&endex.db_pool, &auth_account);
     if result.is_err() {
@@ -461,6 +673,10 @@ pub async fn auth_oauth(
     }
     let a_id = query_latest_auth_id(&endex.db_pool, &auth_hash_hex);
     let next_id = a_id + 1;
+    let request_id = match &req.request_id {
+        Some(id) => id.clone(),
+        None => "".to_string()
+    };
     let auth = Auth {
         acc_hash: auth_hash_hex.clone(),
         auth_id: next_id,
@@ -468,6 +684,7 @@ pub async fn auth_oauth(
         auth_datetime: utils::now_datetime().unwrap(),
         auth_exp: utils::system_time() + 3600,
         audience: "demo_client".to_string(),
+        request_id: request_id,
     };
     let token_r = sign_auth_jwt(
         e.geteid(), pool, &session_id_b, &auth);
@@ -507,6 +724,7 @@ fn sign_auth_jwt(
                 &hash_b,
                 auth.auth_id,
                 auth.auth_exp,
+                auth.request_id.as_ptr() as *const c_char,
                 &mut token,
                 &mut token_size
             )

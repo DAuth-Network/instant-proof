@@ -5,7 +5,8 @@ use dapi;
 drop table if exists account;
 create table account (
     acc_hash varchar(128),
-    acc_seal varchar(2048),
+    acc_seal varchar(512),
+    auth_type varchar(20),
     PRIMARY KEY(acc_hash)
 )
 ROW_FORMAT=COMPRESSED

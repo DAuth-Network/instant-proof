@@ -53,6 +53,25 @@ extern {
         email_seal_size: *mut u32
     ) -> sgx_status_t;
 
+    pub fn ec_send_cipher_sms(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        session_id: &[u8;32],
+        cipher_sms: *const u8,
+        cipher_sms_size: usize,
+    ) -> sgx_status_t;
+
+    pub fn ec_confirm_sms(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        session_id: &[u8;32],
+        cipher_code: *const u8,
+        cipher_code_size: usize,
+        sms_hash: &mut [u8;32],
+        sms_seal: &mut [u8;1024],
+        sms_seal_size: *mut u32
+    ) -> sgx_status_t;
+
     pub fn ec_auth_oauth(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
@@ -82,6 +101,7 @@ extern {
         auth_hash: &[u8;32],
         auth_seq: i32,
         auth_exp: u64,
+        request_id: *const c_char,
         token: &mut [u8;2048],
         token_size: *mut u32
     ) -> sgx_status_t;

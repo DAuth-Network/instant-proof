@@ -7,31 +7,35 @@ use crate::endpoint::err::*;
 pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
+    pub auth_type: AuthType
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum AuthType {
     Email = 0,
-    Google = 1,
-    Twitter = 2,
-    Discord = 3,
-    Telegram = 4,
-    Github = 5
+    Sms = 1,
+    Google = 5,
+    Twitter = 6,
+    Discord = 7,
+    Telegram = 8,
+    Github = 9,
 }
 
 impl AuthType {
-    pub const ALL: [Self;6] = [
-        Self::Email, 
+    pub const ALL: [Self;7] = [
+        Self::Email,
+        Self::Sms,
         Self::Discord,
         Self::Google,
         Self::Github,
         Self::Telegram,
         Self::Twitter
-        ];
+    ];
 
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
             "email" => Some(Self::Email),
+            "sms" => Some(Self::Sms),
             "google" => Some(Self::Google),
             "twitter" => Some(Self::Twitter),
             "discord" => Some(Self::Discord),
@@ -44,11 +48,12 @@ impl AuthType {
     pub fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(Self::Email),
-            1 => Some(Self::Google),
-            2 => Some(Self::Twitter),
-            3 => Some(Self::Discord),
-            4 => Some(Self::Telegram),
-            5 => Some(Self::Github),
+            1 => Some(Self::Sms),
+            5 => Some(Self::Google),
+            6 => Some(Self::Twitter),
+            7 => Some(Self::Discord),
+            8 => Some(Self::Telegram),
+            9 => Some(Self::Github),
             _ => None
         }
     }
@@ -56,6 +61,7 @@ impl AuthType {
     pub fn to_string(self) -> String {
         match self {
             AuthType::Email => "email".to_string(),
+            AuthType::Sms => "sms".to_string(),
             AuthType::Google => "google".to_string(),
             AuthType::Twitter => "twitter".to_string(),
             AuthType::Discord => "discord".to_string(),
@@ -65,6 +71,7 @@ impl AuthType {
     }
 }
 
+
 #[derive(Debug, Clone)]
 pub struct Auth {
     pub acc_hash: String,
@@ -73,7 +80,9 @@ pub struct Auth {
     pub auth_datetime: PrimitiveDateTime,
     pub auth_exp: u64,
     pub audience: String,
+    pub request_id: String,
 }
+
 
 pub fn insert_account_if_new(
     pool: &Pool, account: &Account
@@ -92,10 +101,10 @@ pub fn insert_account(
 ) -> GenericResult<()> {
     let mut conn = pool.get_conn()?;
     let mut tx = conn.start_transaction(TxOpts::default())?;
-    let stmt = "insert into account(acc_hash, acc_seal) values (?,?)";
+    let stmt = "insert into account(acc_hash, acc_seal, auth_type) values (?,?,?)";
     tx.exec_drop(
         stmt,
-        (&account.acc_hash, &account.acc_seal))?;
+        (&account.acc_hash, &account.acc_seal, &account.auth_type.to_string()))?;
     tx.commit()?;
     Ok(())
 }
@@ -113,11 +122,13 @@ pub fn query_account(
     conn.query_iter(stmt)?.for_each(|row| {
         let r :(
             std::string::String,
-            std::string::String
+            std::string::String,
+            std::string::String,
         ) = from_row(row.unwrap());
         result.push(Account {
             acc_hash: r.0,
             acc_seal: r.1,
+            auth_type: AuthType::from_str(&r.2).unwrap(),
         });
     });
     Ok(result)
