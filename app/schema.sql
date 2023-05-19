@@ -7,7 +7,7 @@ create table account (
     acc_hash varchar(128),
     acc_seal varchar(512),
     auth_type varchar(20),
-    PRIMARY KEY(acc_hash)
+    PRIMARY KEY(acc_hash, auth_type)
 )
 ROW_FORMAT=COMPRESSED
 CHARACTER set = utf8mb4;
@@ -15,18 +15,21 @@ CHARACTER set = utf8mb4;
 
 drop table if exists auth;
 create table auth (
+    id BIGINT NOT NULL AUTO_INCREMENT,
     acc_hash varchar(128),
-    auth_id int not null,  /* auth seq or nonce */
     auth_type varchar(20),
+    acc_auth_seq int not null,  /* auth seq or nonce */
     audience varchar(128), /* client_name*/
     auth_datetime datetime,
     auth_exp SERIAL,
+    request_id varchar(32),
     INDEX i_date using btree(auth_datetime),
     INDEX i_account using hash(acc_hash),
-    PRIMARY KEY(acc_hash, auth_id)
+    PRIMARY KEY(id)
 )
 ROW_FORMAT=COMPRESSED
 CHARACTER set = utf8mb4;
+
 
 create database dclient;
 use dclient;

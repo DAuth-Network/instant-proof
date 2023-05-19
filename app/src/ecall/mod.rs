@@ -26,50 +26,27 @@ extern {
         session_id: &[u8;32]
     ) -> sgx_status_t;
 
-    pub fn ec_send_cipher_email(
+    pub fn ec_send_otp(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
+        auth_type: i32,
         session_id: &[u8;32],
-        cipher_email: *const u8,
-        cipher_email_size: usize,
+        cipher_channel: *const u8,
+        cipher_channel_size: usize,
     ) -> sgx_status_t;
 
-    pub fn ec_send_seal_email(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8;32],
-        seal_email: *const u8,
-        seal_email_size: usize
-    ) -> sgx_status_t;
-
-    pub fn ec_confirm_email(
+    pub fn ec_confirm_otp(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
         session_id: &[u8;32],
         cipher_code: *const u8,
         cipher_code_size: usize,
-        email_hash: &mut [u8;32],
-        email_seal: &mut [u8;1024],
-        email_seal_size: *mut u32
-    ) -> sgx_status_t;
-
-    pub fn ec_send_cipher_sms(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8;32],
-        cipher_sms: *const u8,
-        cipher_sms_size: usize,
-    ) -> sgx_status_t;
-
-    pub fn ec_confirm_sms(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8;32],
-        cipher_code: *const u8,
-        cipher_code_size: usize,
-        sms_hash: &mut [u8;32],
-        sms_seal: &mut [u8;1024],
-        sms_seal_size: *mut u32
+        request_id: *const u8,
+        request_id_size: usize,
+        account_b: *mut u8,
+        max_len: usize,
+        account_b_size: *mut usize,
+        signature: &mut [u8;65]
     ) -> sgx_status_t;
 
     pub fn ec_auth_oauth(
@@ -78,18 +55,23 @@ extern {
         session_id: &[u8;32],
         cipher_code: *const u8,
         cipher_code_size: usize,
-        oauth_type: i32,
-        auth_hash: &mut [u8;32],
-        auth_seal: &mut [u8;1024],
-        auth_seal_size: *mut u32
+        request_id: *const u8,
+        request_id_size: usize,
+        auth_type: i32,
+        account_b: *mut u8,
+        max_len: usize,
+        account_b_size: *mut usize,
+        signature: &mut [u8;65]
     ) -> sgx_status_t;
 
+
+    /* 
     pub fn ec_sign_auth(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
-        auth_hash: &[u8;32],
-        auth_seq: i32,
-        auth_exp: u64,
+        session_id: &[u8;32],
+        auth_b: *const u8,
+        auth_b_size: usize,
         pub_k: &mut [u8;65],
         signature: &mut [u8;65]
     ) -> sgx_status_t;
@@ -98,14 +80,13 @@ extern {
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
         session_id: &[u8;32],
-        auth_hash: &[u8;32],
-        auth_seq: i32,
-        auth_exp: u64,
-        request_id: *const c_char,
+        auth_b: *const u8,
+        auth_b_size: usize,
         token: &mut [u8;2048],
         token_size: *mut u32
     ) -> sgx_status_t;
-
+    */
+    
     pub fn ec_get_sign_pub_key(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
@@ -116,6 +97,14 @@ extern {
     pub fn ec_test(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,
+    ) -> sgx_status_t;
+
+    pub fn ec_send_seal_email(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        session_id: &[u8;32],
+        seal_email: *const u8,
+        seal_email_size: usize
     ) -> sgx_status_t;
 
 }

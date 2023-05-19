@@ -14,9 +14,10 @@ use super::log::*;
 use super::oauth::*;
 
 pub fn sendsms(conf: &Sms, to_account:&str, c_code: &str) -> GenericResult<()> {
+    let body = format!("[DAuth Verification Code] Please use the following code to verify your account: {}", c_code);
     let token_req = format!(
         "Body={}&From={}&To={}",
-        c_code,
+        &body,
         conf.sender,
         to_account);
     let token_headers = HashMap::from([
@@ -26,7 +27,7 @@ pub fn sendsms(conf: &Sms, to_account:&str, c_code: &str) -> GenericResult<()> {
     let sms_resp = http_req(
         &conf.server, 
         Method::POST,
-        None,
+        Some(token_req),
         token_headers
     );
     if sms_resp.is_err() {

@@ -1,9 +1,7 @@
 extern crate openssl;
 #[macro_use]
 use std::str;
-use std::sync::Arc;
 use actix_http::header::{HeaderMap, ORIGIN};
-use http_req::request;
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
 use actix_web::{
@@ -17,13 +15,12 @@ use sgx_types::*;
 use sgx_urts::SgxEnclave;
 use mysql::*;
 use crate::ecall;
-use crate::endpoint::utils::GenericError;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
 use crate::endpoint::utils;
 use crate::endpoint::session;
 
-use super::err::DAuthError;
+use super::err::*;
 use super::session::SessionState;
 use super::config::*;
 
@@ -160,17 +157,55 @@ pub async fn exchange_key(
 
 
 #[derive(Deserialize)]
-pub struct AuthEmailReq {
+pub struct AuthOtpReq {
     client_id: String,
     session_id: String,
-    cipher_email: String,
+    cipher_channel: String,
+    auth_type: String,
     request_id: Option<String>
 }
 
+struct CipherContent {
+    content: String,
+}
+
+impl CipherContent {
+    fn from_str(content: String) -> Self {
+        Self {
+            content
+        }
+    }
+    fn as_bytes(&self) -> GenericResult<Vec<u8>> {
+        match hex::decode(&self.content) {
+            Ok(b) => Ok(b),
+            Err(e) => Err(e.into())
+        }
+    }
+}
+
+struct SealContent {
+    content: String,
+}
+
+impl SealContent {
+    fn new(content: String) -> Self {
+        Self {
+            content
+        }
+    }
+    fn as_hex(&self) -> GenericResult<Vec<u8>> {
+        match hex::decode(&self.content) {
+            Ok(b) => Ok(b),
+            Err(e) => Err(e.into())
+        }
+    }
+}
+
+
 // with BaseResp
-#[post("/auth_email")]
-pub async fn auth_email(
-    req: web::Json<AuthEmailReq>,
+#[post("/auth_otp")]
+pub async fn auth_otp(
+    req: web::Json<AuthOtpReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>
@@ -191,23 +226,33 @@ pub async fn auth_email(
         return fail_resp(DAuthError::SessionError);
     }
     let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
-    let email_b_r = hex::decode(&req.cipher_email);
-    if email_b_r.is_err() {
-        info!("email decode error");
+
+    let c_channel = CipherContent {
+        content: req.cipher_channel.clone(),
+    };
+    let c_channel_b = match c_channel.as_bytes() {
+        Ok(b) => b,
+        Err(e) => {
+            error!("cipher channel decode error: {}", e);
+            return fail_resp(DAuthError::DataError);
+        }
+    };
+    let auth_type = AuthType::from_str(&req.auth_type);
+    if auth_type.is_none() {
         return fail_resp(DAuthError::DataError);
     }
-    let email_b = email_b_r.unwrap();
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     // sendmail
     let pool = &endex.thread_pool;
     let result = pool.install(|| {
         unsafe {
-            ecall::ec_send_cipher_email(
+            ecall::ec_send_otp(
                 endex.enclave.geteid(), 
                 &mut sgx_result, 
+                auth_type.unwrap() as i32,
                 &session_id_b,
-                email_b.as_ptr() as *const u8,
-                email_b.len(),
+                c_channel_b.as_ptr() as *const u8,
+                c_channel_b.len(),
             )
         }
     }); 
@@ -224,7 +269,7 @@ pub async fn auth_email(
             return fail_resp(DAuthError::DataError);
         },
         sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE => {
-            return fail_resp(DAuthError::SendmailError);
+            return fail_resp(DAuthError::SendChannelError);
         },
         sgx_status_t::SGX_SUCCESS => {
             return succ_resp();
@@ -237,11 +282,11 @@ pub async fn auth_email(
 }
 
 #[derive(Deserialize)]
-pub struct AuthEmailConfirmReq {
+pub struct AuthOtpConfirmReq {
     client_id: String,
     session_id: String,
     cipher_code: String,
-    request_id: Option<String>,
+    request_id: Option<String>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -250,9 +295,9 @@ pub struct AuthSuccessResp {
     cipher_token: String
 }
 
-#[post("/auth_email_confirm")]
-pub async fn auth_email_confirm(
-    req: web::Json<AuthEmailConfirmReq>,
+#[post("/auth_otp_confirm")]
+pub async fn auth_otp_confirm(
+    req: web::Json<AuthOtpConfirmReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>
@@ -274,226 +319,44 @@ pub async fn auth_email_confirm(
         return fail_resp(DAuthError::SessionError);
     }
     let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
-    let e = &endex.enclave;
-    let pool = &endex.thread_pool;
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let code_b = hex::decode(&req.cipher_code).unwrap();
-
-    let mut email_hash = [0_u8;32];
-    let mut email_seal = [0_u8;1024];
-    let mut email_size = 0;
-    let result = pool.install(|| {
-        unsafe {
-            ecall::ec_confirm_email(
-                e.geteid(), 
-                &mut sgx_result, 
-                &session_id_b,
-                code_b.as_ptr() as *const u8,
-                code_b.len(),
-                &mut email_hash,
-                &mut email_seal,
-                &mut email_size,
-            )
-        }
-    });
-    if !sgx_success(result) {
-        error!("unsafe call failed.");
-        return fail_resp(DAuthError::SgxError);
-    }
-    match sgx_result {
-        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
-            return fail_resp(DAuthError::SessionError);
-        },
-        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
-            return fail_resp(DAuthError::DataError);
-        },
-        sgx_status_t::SGX_SUCCESS => {
-            info!("confirm mail success");
-        },
-        _ => {
-            error!("sgx return unknown error {}", sgx_result);
-            return fail_resp(DAuthError::SgxError);
-        },
-    }
-    let email_hash_hex = hex::encode(email_hash);
-    let size: usize = email_size.try_into().unwrap();
-    let email_seal_hex = hex::encode(&email_seal[..size]);
-    // after confirm mail success, if new email, insert_mail
-    // increase auth_hist
-    // return token
-    let account = Account {
-        acc_hash: email_hash_hex.clone(),
-        acc_seal: email_seal_hex,
-        auth_type: AuthType::Email
+    let c_code = CipherContent {
+        content: req.cipher_code.clone(),
     };
-    let insert_r = insert_account_if_new(&endex.db_pool, &account);
-    if insert_r.is_err() {
-        return fail_resp(DAuthError::DbError);
-    }
-    let a_id = query_latest_auth_id(&endex.db_pool, &account.acc_hash);
-    let next_id = a_id + 1;
+    let c_code_b = match c_code.as_bytes() {
+        Ok(b) => b,
+        Err(e) => {
+            error!("cipher code decode error: {}", e);
+            return fail_resp(DAuthError::DataError);
+        }
+    };
     let request_id = match req.request_id {
         Some(ref r) => r.clone(),
-        None => "".to_string(),
+        None => "None".to_string(),
     };
-    let auth =  Auth {
-        acc_hash: email_hash_hex.clone(),
-        auth_id: next_id,
-        auth_type: AuthType::Email,
-        auth_datetime: utils::now_datetime().unwrap(),
-        auth_exp: utils::system_time() + 3600,
-        audience: client_name.unwrap(),
-        request_id: request_id,
-    };
-    let token_r = sign_auth_jwt(
-        e.geteid(), pool, &session_id_b ,&auth);
-    if token_r.is_err() {
-        return fail_resp(DAuthError::SgxError);
-    }
-    let token = token_r.unwrap();
-    let auth_r = insert_auth(&endex.db_pool, auth);
-    if auth_r.is_err() {
-        error!("insert auth failed {}", auth_r.err().unwrap());
-        return fail_resp(DAuthError::DbError);
-    }
-    json_resp(
-        AuthSuccessResp{
-            status: SUCC.to_string(),
-            cipher_token: token
-        }
-    )
-}
+    let request_id_b = request_id.as_bytes();
 
-#[derive(Deserialize)]
-pub struct AuthSmsReq {
-    client_id: String,
-    session_id: String,
-    cipher_sms: String,
-    request_id: Option<String>
-}
-
-// with BaseResp
-#[post("/auth_sms")]
-pub async fn auth_sms(
-    req: web::Json<AuthSmsReq>,
-    http_req: HttpRequest,
-    endex: web::Data<AppState>,
-    sessions: web::Data<session::SessionState>
-) -> HttpResponse {
-    info!("auth sms with session_id {}", &req.session_id);
-    // validate client
-    let client_name = get_client_name(
-        &endex.clients, 
-        &req.client_id,
-        &http_req.headers(),
-        &endex.env
-    );
-    if client_name.is_none() {
-        return fail_resp(DAuthError::ClientError);
-    }
-    // validate session
-    if !validate_session(&sessions, &req.session_id) {
-        close_ec_session(endex.enclave.geteid(), &req.session_id);
-        return fail_resp(DAuthError::SessionError);
-    }
-    let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
-    let sms_b_r = hex::decode(&req.cipher_sms);
-    if sms_b_r.is_err() {
-        info!("sms decode error");
-        return fail_resp(DAuthError::DataError);
-    }
-    let sms_b = sms_b_r.unwrap();
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    // sendmail
-    let pool = &endex.thread_pool;
-    let result = pool.install(|| {
-        unsafe {
-            ecall::ec_send_cipher_sms(
-                endex.enclave.geteid(), 
-                &mut sgx_result, 
-                &session_id_b,
-                sms_b.as_ptr() as *const u8,
-                sms_b.len(),
-            )
-        }
-    }); 
-    if !sgx_success(result) {
-        error!("unsafe call failed.");
-        return fail_resp(DAuthError::SgxError);
-    }
-    info!("sgx result {}", &sgx_result);
-    match sgx_result {
-        sgx_status_t::SGX_ERROR_AE_SESSION_INVALID => {
-            return fail_resp(DAuthError::SessionError);
-        },
-        sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE => {
-            return fail_resp(DAuthError::DataError);
-        },
-        sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE => {
-            return fail_resp(DAuthError::SendmailError);
-        },
-        sgx_status_t::SGX_SUCCESS => {
-            return succ_resp();
-        },
-        _ => {
-            error!("sgx return unknown error {}", sgx_result);
-            return fail_resp(DAuthError::SgxError);
-        },
-    }
-}
-
-#[derive(Deserialize)]
-pub struct AuthSmsConfirmReq {
-    client_id: String,
-    session_id: String,
-    cipher_code: String,
-    request_id: Option<String>,
-}
-
-
-#[post("/auth_sms_confirm")]
-pub async fn auth_sms_confirm(
-    req: web::Json<AuthSmsConfirmReq>,
-    http_req: HttpRequest,
-    endex: web::Data<AppState>,
-    sessions: web::Data<session::SessionState>
-) -> HttpResponse {
-    info!("register mail confirm with session_id {}", &req.session_id);
-    // validate client
-    let client_name = get_client_name(
-        &endex.clients, 
-        &req.client_id,
-        &http_req.headers(),
-        &endex.env
-    );
-    if client_name.is_none() {
-        return fail_resp(DAuthError::ClientError);
-    }
-    // verify session_id
-    if !validate_session(&sessions, &req.session_id) {
-        close_ec_session(endex.enclave.geteid(), &req.session_id);
-        return fail_resp(DAuthError::SessionError);
-    }
-    let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
     let e = &endex.enclave;
     let pool = &endex.thread_pool;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let code_b = hex::decode(&req.cipher_code).unwrap();
 
-    let mut sms_hash = [0_u8;32];
-    let mut sms_seal = [0_u8;1024];
-    let mut sms_seal_size = 0;
+    let mut account_b = [0_u8;1024];
+    let mut account_b_size = 0;
+    let mut signature_b = [0_u8;65];
+    let mut signature_b_size = 0;
     let result = pool.install(|| {
         unsafe {
-            ecall::ec_confirm_email(
+            ecall::ec_confirm_otp(
                 e.geteid(), 
                 &mut sgx_result, 
                 &session_id_b,
-                code_b.as_ptr() as *const u8,
-                code_b.len(),
-                &mut sms_hash,
-                &mut sms_seal,
-                &mut sms_seal_size,
+                c_code_b.as_ptr() as *const u8,
+                c_code_b.len(),
+                request_id_b.as_ptr() as *const u8,
+                request_id_b.len(),
+                account_b.as_ptr() as *mut u8,
+                1024,
+                &mut account_b_size,
+                &mut signature_b
             )
         }
     });
@@ -516,51 +379,23 @@ pub async fn auth_sms_confirm(
             return fail_resp(DAuthError::SgxError);
         },
     }
-    let sms_hash_hex = hex::encode(sms_hash);
-    let size: usize = sms_seal_size.try_into().unwrap();
-    let sms_seal_hex = hex::encode(&sms_seal[..size]);
-    // after confirm mail success, if new email, insert_mail
-    // increase auth_hist
-    // return token
-    let account = Account {
-        acc_hash: sms_hash_hex.clone(),
-        acc_seal: sms_seal_hex,
-        auth_type: AuthType::Sms,
-    };
+    let account_slice = &account_b[0..account_b_size];
+    let account = serde_json::from_slice(account_slice).unwrap();
     let insert_r = insert_account_if_new(&endex.db_pool, &account);
     if insert_r.is_err() {
+        error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
-    let a_id = query_latest_auth_id(&endex.db_pool, &account.acc_hash);
-    let next_id = a_id + 1;
-    let request_id = match &req.request_id {
-        Some(id) => id.clone(),
-        None => "".to_string(),
-    };
-    let auth =  Auth {
-        acc_hash: sms_hash_hex.clone(),
-        auth_id: next_id,
-        auth_type: AuthType::Email,
-        auth_datetime: utils::now_datetime().unwrap(),
-        auth_exp: utils::system_time() + 3600,
-        audience: client_name.unwrap(),
-        request_id: request_id
-    };
-    let token_r = sign_auth_jwt(
-        e.geteid(), pool, &session_id_b ,&auth);
-    if token_r.is_err() {
-        return fail_resp(DAuthError::SgxError);
-    }
-    let token = token_r.unwrap();
-    let auth_r = insert_auth(&endex.db_pool, auth);
-    if auth_r.is_err() {
-        error!("insert auth failed {}", auth_r.err().unwrap());
+    let auth = Auth::new(&account, request_id, client_name.unwrap());
+    let insert_auth_r = insert_auth(&endex.db_pool, auth);
+    if insert_auth_r.is_err() {
+        error!("insert auth error {}", insert_auth_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            cipher_token: token
+            cipher_token: hex::encode(signature_b)
         }
     )
 }
@@ -571,7 +406,7 @@ pub struct AuthOauthReq {
     client_id: String,
     session_id: String,
     cipher_code: String,
-    oauth_type: String,
+    auth_type: String,
     request_id: Option<String>
 }
 
@@ -600,10 +435,15 @@ pub async fn auth_oauth(
         return fail_resp(DAuthError::SessionError);
     }
     // validate auth_type
-    let auth_type_r = AuthType::from_str(&req.oauth_type);
+    let auth_type_r = AuthType::from_str(&req.auth_type);
     if auth_type_r.is_none() {
         return fail_resp(DAuthError::DataError);
     }
+    let request_id = match req.request_id {
+        Some(ref r) => r.clone(),
+        None => "None".to_string(),
+    };
+    let request_id_b = request_id.as_bytes();
 
     let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
     let e = &endex.enclave;
@@ -611,9 +451,11 @@ pub async fn auth_oauth(
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
     let auth_type = auth_type_r.unwrap();
     let code_b = hex::decode(&req.cipher_code).unwrap();
-    let mut acc_hash = [0_u8;32];
-    let mut acc_seal = [0_u8;1024];
-    let mut acc_seal_size = 0;
+
+    let mut account_b = [0_u8;1024];
+    let mut account_b_size = 0;
+    let mut signature_b = [0_u8;65];
+    let mut signature_b_size = 0;
 
     let result = pool.install(|| {
         unsafe {
@@ -623,10 +465,13 @@ pub async fn auth_oauth(
                 &session_id_b,
                 code_b.as_ptr() as *const u8,
                 code_b.len(),
+                request_id_b.as_ptr() as *const u8,
+                request_id_b.len(),
                 auth_type as i32,
-                &mut acc_hash,
-                &mut acc_seal,
-                &mut acc_seal_size
+                account_b.as_ptr() as *mut u8,
+                1024,
+                &mut account_b_size,
+                &mut signature_b
             )
         }
     });
@@ -656,93 +501,25 @@ pub async fn auth_oauth(
             return fail_resp(DAuthError::SgxError);
         },
     }
-    let auth_hash_hex = hex::encode(acc_hash);
-    let size: usize = acc_seal_size.try_into().unwrap();
-    let auth_seal_hex = hex::encode(&acc_seal[..size]);
-    // after oauth success, if new oauth, update, else do nothing
-    // insert auth
-    let auth_account = Account {
-        acc_hash: auth_hash_hex.clone(),
-        acc_seal: auth_seal_hex,
-        auth_type: auth_type,
-    };
-    let result = insert_account_if_new(&endex.db_pool, &auth_account);
-    if result.is_err() {
-        error!("insert account failed");
+    let account_slice = &account_b[0..account_b_size];
+    let account = serde_json::from_slice(account_slice).unwrap();
+    let insert_r = insert_account_if_new(&endex.db_pool, &account);
+    if insert_r.is_err() {
+        error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
-    let a_id = query_latest_auth_id(&endex.db_pool, &auth_hash_hex);
-    let next_id = a_id + 1;
-    let request_id = match &req.request_id {
-        Some(id) => id.clone(),
-        None => "".to_string()
-    };
-    let auth = Auth {
-        acc_hash: auth_hash_hex.clone(),
-        auth_id: next_id,
-        auth_type: auth_type,        
-        auth_datetime: utils::now_datetime().unwrap(),
-        auth_exp: utils::system_time() + 3600,
-        audience: "demo_client".to_string(),
-        request_id: request_id,
-    };
-    let token_r = sign_auth_jwt(
-        e.geteid(), pool, &session_id_b, &auth);
-    if token_r.is_err() {
-        return fail_resp(DAuthError::SgxError);
-    }
-    let token = token_r.unwrap();
-    let auth_r = insert_auth(&endex.db_pool, auth);
-    if auth_r.is_err() {
-        error!("insert auth failed {}", auth_r.err().unwrap());
+    let auth = Auth::new(&account, request_id, client_name.unwrap());
+    let insert_auth_r = insert_auth(&endex.db_pool, auth);
+    if insert_auth_r.is_err() {
+        error!("insert auth error {}", insert_auth_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
-    json_resp(AuthSuccessResp{
-        status: SUCC.to_string(),
-        cipher_token: token
-    })
-}
-
-
-fn sign_auth_jwt(
-    eid: sgx_enclave_id_t, 
-    pool: &rayon::ThreadPool, 
-    session_id: &[u8;32],
-    auth: &Auth
-) -> utils::GenericResult<String> {
-    info!("sign auth for {:?} {} times", &auth.acc_hash, &auth.auth_id);
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let hash_b = hex::decode(&auth.acc_hash).unwrap().try_into().unwrap();
-    let mut token: [u8;2048] = [0_u8;2048];
-    let mut token_size = 0;
-    let result = pool.install(|| {
-        unsafe {
-            ecall::ec_sign_auth_jwt(
-                eid,
-                &mut sgx_result,
-                session_id,
-                &hash_b,
-                auth.auth_id,
-                auth.auth_exp,
-                auth.request_id.as_ptr() as *const c_char,
-                &mut token,
-                &mut token_size
-            )
+    json_resp(
+        AuthSuccessResp{
+            status: SUCC.to_string(),
+            cipher_token: hex::encode(signature_b)
         }
-    });
-    match result {
-        sgx_status_t::SGX_SUCCESS => {
-            info!("sign auth jwt succeed");
-            let size: usize = token_size.try_into().unwrap();
-            let token_s = hex::encode(&token[..size]);
-            Ok(token_s)
-        },
-        _ => {
-            error!("sgx failed.");
-            Err(GenericError::from("ec_auth_sign failed"))
-        }
-    }
-
+    )
 }
 
 
@@ -753,12 +530,12 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
     HttpResponse::Ok().body("dauth sdk is up and running!")
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwksResp {
     keys: Vec<RSAPublicKey>
 }
 
+/* 
 #[get("/jwks.json")]
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
@@ -768,6 +545,7 @@ pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
         keys: vec![pub_key]
     })
 }
+*/
 
 fn close_ec_session(eid: sgx_enclave_id_t, session_id: &str) {
     let session_id_b_r = hex::decode(session_id);
@@ -850,3 +628,5 @@ fn validate_session(
     }
     return true;
 }
+
+

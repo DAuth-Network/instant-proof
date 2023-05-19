@@ -15,6 +15,7 @@ use super::sgx_utils;
 use super::os_utils;
 use super::log::*;
 use super::err::*;
+use super::model::*;
 
 /// User state includes a Map
 /// which stores user account -> confirm code mapping

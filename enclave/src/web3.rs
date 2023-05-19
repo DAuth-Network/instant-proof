@@ -2,6 +2,21 @@ use super::os_utils::*;
 use super::log::*;
 use tiny_keccak::*;
 use std::string::*;
+use std::vec::Vec;
+use sgx_types::*;
+
+
+pub fn eth_sign(msg: &str, prv_k: sgx_ec256_private_t) -> Vec<u8>{
+    let msg_sha = eth_message(msg);
+    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k.r).unwrap();
+    let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
+    let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
+    let last_byte = r_id.serialize() + 27;
+    let mut sig_buffer: Vec<u8> = Vec::with_capacity(65);
+    sig_buffer.extend_from_slice(&sig.serialize());
+    sig_buffer.push(last_byte);
+    sig_buffer
+}
 
 pub fn gen_auth_bytes(sgx_pub_key: &[u8;65],
     auth_hash: &[u8;32],
@@ -14,7 +29,7 @@ pub fn gen_auth_bytes(sgx_pub_key: &[u8;65],
     eth_message(&msg)
 }
 
-pub fn eth_message(message: &String) -> [u8; 32] {
+pub fn eth_message(message: &str) -> [u8; 32] {
     let msg = format!(
         "{}{}{}",
         "\x19Ethereum Signed Message:\n",

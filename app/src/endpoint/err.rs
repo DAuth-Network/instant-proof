@@ -8,7 +8,7 @@ pub type GenericResult<T> = Result<T, GenericError>;
 pub enum DAuthError {
     ClientError = 0,
     DecryptError = 1,
-    SendmailError = 2,
+    SendChannelError = 2,
     OAuthCodeError = 3,
     OAuthProfileError = 4,
     SessionError = 5,
@@ -22,7 +22,7 @@ impl DAuthError {
         match self {
             DAuthError::ClientError => "ClientError".to_string(),
             DAuthError::DecryptError => "DecryptError".to_string(),
-            DAuthError::SendmailError => "SendmailError".to_string(),
+            DAuthError::SendChannelError => "SendMessageError".to_string(),
             DAuthError::OAuthCodeError => "OAuthCodeError".to_string(),
             DAuthError::OAuthProfileError => "OAuthProfileError".to_string(),
             DAuthError::SessionError => "SessionError".to_string(),
@@ -36,7 +36,7 @@ impl DAuthError {
         match self {
             DAuthError::ClientError => "invalid client_id".to_string(),
             DAuthError::DecryptError => "decrypt failed".to_string(),
-            DAuthError::SendmailError => "sendmail failed".to_string(),
+            DAuthError::SendChannelError => "send message failed".to_string(),
             DAuthError::OAuthCodeError => "failed to exchange oauth code".to_string(),
             DAuthError::OAuthProfileError => "failed to get oauth profile".to_string(),
             DAuthError::SessionError => "session expired or not found".to_string(),
@@ -50,7 +50,7 @@ impl DAuthError {
         match error {
             0 => Some(DAuthError::ClientError),
             1 => Some(DAuthError::DecryptError),
-            2 => Some(DAuthError::SendmailError),
+            2 => Some(DAuthError::SendChannelError),
             3 => Some(DAuthError::OAuthCodeError),
             4 => Some(DAuthError::OAuthProfileError),
             5 => Some(DAuthError::SessionError),

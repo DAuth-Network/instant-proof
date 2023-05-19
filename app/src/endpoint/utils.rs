@@ -5,8 +5,8 @@ use time::{PrimitiveDateTime, format_description};
 use chrono::prelude::*;
 use std::boxed::Box;
 
-pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
-pub type GenericResult<T> = Result<T, GenericError>;
+// pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
+// pub type GenericResult<T> = Result<T, GenericError>;
 
 
 /// Get system time now in u64 format

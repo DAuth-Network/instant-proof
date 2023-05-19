@@ -45,10 +45,10 @@ pub fn google_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String>{
         user_headers
     );
     let v2: Value = serde_json::from_str(&account_resp?)?;
-    if v2["sub"].is_null() {
+    if v2["email"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
-    Ok(v2["sub"].clone().to_string())
+    Ok(v2["email"].clone().to_string())
 }
 
 /* 

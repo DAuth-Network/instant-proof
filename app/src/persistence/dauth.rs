@@ -1,16 +1,18 @@
 use mysql::*;
 use mysql::prelude::*;
+use serde_derive::{Serialize, Deserialize};
 use time::PrimitiveDateTime;
 use crate::endpoint::err::*;
+use crate::endpoint::utils;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
     pub auth_type: AuthType
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AuthType {
     Email = 0,
     Sms = 1,
@@ -75,14 +77,31 @@ impl AuthType {
 #[derive(Debug, Clone)]
 pub struct Auth {
     pub acc_hash: String,
-    pub auth_id: i32,
     pub auth_type: AuthType,
+    pub auth_id: i32,
     pub auth_datetime: PrimitiveDateTime,
     pub auth_exp: u64,
     pub audience: String,
     pub request_id: String,
 }
 
+impl Auth {
+    pub fn new(
+        account: &Account,
+        audience: String,
+        request_id: String,
+    ) -> Self {
+        Self {
+            acc_hash: account.acc_hash.clone(),
+            auth_type: account.auth_type.clone(),
+            auth_id: 0,
+            auth_datetime: utils::now_datetime().unwrap(),
+            auth_exp: 0,
+            audience,
+            request_id,
+        }
+    }
+}
 
 pub fn insert_account_if_new(
     pool: &Pool, account: &Account
@@ -116,8 +135,8 @@ pub fn query_account(
     let mut result: Vec<Account> = Vec::new();
     let mut conn = pool.get_conn()?;
     let stmt = format!(
-        "select acc_hash, acc_seal from account where acc_hash='{}'",
-        account.acc_hash
+        "select acc_hash, acc_seal, auth_type from account where acc_hash='{}' and auth_type='{}'",
+        account.acc_hash, account.auth_type.to_string()
     );
     conn.query_iter(stmt)?.for_each(|row| {
         let r :(
@@ -141,23 +160,28 @@ pub fn insert_auth(
     let mut tx = conn.start_transaction(TxOpts::default())?;
     tx.exec_drop(
         "insert into auth (
-            acc_hash, auth_id, auth_type, auth_datetime, auth_exp, audience
-        ) values (?, ?, ?, ?, ?, ?)",
+            acc_hash, auth_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
+        ) values (?, ?, ?, ?, ?, ?, ?)",
         (hist.acc_hash,
-            hist.auth_id,
             hist.auth_type.to_string(),
+            hist.auth_id,
+            hist.audience,
             hist.auth_datetime,
             hist.auth_exp,
-            hist.audience))?;
+            hist.request_id
+        ))?;
     tx.commit()?;
     Ok(())
 }
 
-pub fn query_latest_auth_id(pool: &Pool, acc_hash: &String) -> i32{
+pub fn query_latest_auth_id(pool: &Pool, account: &Account) -> i32{
     let mut conn = pool.get_conn().unwrap();
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
     let count: Option<i32> = tx.query_first(
-        format!("select count(*) from auth where acc_hash = '{}'", acc_hash)
+        format!(
+                "select count(*) from auth where acc_hash='{}' and auth_type='{}'", 
+                account.acc_hash, account.auth_type.to_string()
+        )
     ).unwrap();
     tx.commit().unwrap();
     return count.unwrap();

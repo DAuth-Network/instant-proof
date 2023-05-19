@@ -183,8 +183,6 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
     builder.set_certificate_chain_file("certs/MyCertificate.crt").unwrap();
 
-    let server_url = format!("{}:{}", conf.api.host, conf.api.port);
-    let server_port: u16 = conf.api.port;
     let subpath = conf.api.prefix;
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
@@ -196,12 +194,10 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::clone(&ustate))
             .service(web::scope(&subpath)
                 .service(exchange_key)
-                .service(auth_email)
-                .service(auth_email_confirm)
+                .service(auth_otp)
+                .service(auth_otp_confirm)
                 .service(auth_oauth)
-                .service(auth_sms)
-                .service(auth_sms_confirm)
-                .service(jwks)
+               // .service(jwks)
                 .service(health)
             );
         // load index.html for testing only when env is dev
@@ -216,8 +212,9 @@ async fn main() -> std::io::Result<()> {
     // uncomment to enable https
     let protocol = conf.api.protocol;
     if protocol.eq("https") {
+        let server_url = format!("{}:{}", &conf.api.host, &conf.api.port);
         server.bind_openssl(server_url, builder)?.run().await
     } else {
-        server.bind(("0.0.0.0", server_port))?.run().await
+        server.bind((conf.api.host, conf.api.port))?.run().await
     }
 }

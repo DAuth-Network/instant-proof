@@ -29,6 +29,8 @@ extern crate sgx_tseal;
 
 use std::convert::TryInto;
 use config::*;
+use http_req::uri::Authority;
+use jsonwebtoken::crypto::sign;
 use serde::{Deserialize, Serialize};
 use sgx_trts::enclave;
 use sgx_types::*;
@@ -46,6 +48,7 @@ use std::string::{String, ToString};
 // use std::prelude::v1::*;
 use std::str;
 use std::vec::Vec;
+use std::ptr;
 
 pub mod sgx_utils;
 pub mod os_utils;
@@ -56,10 +59,12 @@ pub mod config;
 pub mod oauth;
 pub mod log;
 pub mod sms;
+pub mod model;
 
 use self::err::*;
 use self::session::*;
 use self::log::*;
+use self::model::*;
 use oauth::*;
 use libsecp256k1::{SecretKey, PublicKey};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
@@ -183,46 +188,62 @@ pub extern "C" fn ec_set_conf(
   2, send the digits to user email
  */
 #[no_mangle]
-pub extern "C" fn ec_send_cipher_email(
+pub extern "C" fn ec_send_otp(
+    auth_type_i: i32,
     session_id: &[u8;32],
-    cipher_email: *const u8,
-    email_size: usize,
+    cipher_channel: *const u8,
+    cipher_channel_size: usize,
 ) -> sgx_status_t {
-    info("sgx send cipher email");
-    let email_slice = unsafe { slice::from_raw_parts(cipher_email, email_size as usize) };
+    info("sgx send otp");
+    let channel_slice = unsafe { 
+        slice::from_raw_parts(cipher_channel, cipher_channel_size as usize) 
+    };
     let session_r = get_session(session_id);
     if session_r.is_none() {
         error(&format!("sgx session {:?} not found.", session_id));
         return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
     }
     let mut session = session_r.unwrap();
-    let email_bytes_r = session.decrypt(email_slice);
-    if email_bytes_r.is_err() {
+    let channel_bytes_r = session.decrypt(channel_slice);
+    if channel_bytes_r.is_err() {
         error("decrypt email failed");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
-    let email_bytes = email_bytes_r.unwrap();
-    let email = match str::from_utf8(&email_bytes) {
-        Ok(r) => {
-            r
-        },
+    let channel_bytes = channel_bytes_r.unwrap();
+    let channel = match str::from_utf8(&channel_bytes) {
+        Ok(r) => r,
         Err(_) => {
             info("decrypt bytes to str failed");
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
-    info(&format!("email is {}", email));
-    let r = sgx_utils::rand();
+    info(&format!("channel is {}", channel));
+    let otp = sgx_utils::rand();
     //TODO: sendmail error
-    session.code = r.to_string();
-    session.data = email.to_string();
+    let auth_type = AuthType::from_int(auth_type_i).unwrap();
+    session.code = otp.to_string();
+    let inner_account = InnerAccount {
+        account: channel.to_string(),
+        auth_type: auth_type,
+    };
+    session.data = inner_account.to_str();
     update_session(&session_id, &session);
-    let mail_r = os_utils::sendmail(
-        &get_config_email(), 
-        &email, 
-        &r.to_string());
-    if mail_r.is_err() {
-        error("send mail failed");
+    let send_r = match auth_type {
+        AuthType::Email => os_utils::sendmail(
+            &get_config_email(), 
+            &channel, 
+            &otp.to_string()),
+        AuthType::Sms => sms::sendsms(
+            &get_config_sms(), 
+            &channel, 
+            &otp.to_string()),
+        _ => {
+            error("invalid auth type");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
+    if send_r.is_err() {
+        error("send otp failed");
         return sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE;
     }
     sgx_status_t::SGX_SUCCESS
@@ -233,23 +254,40 @@ fn get_config_email() -> Email {
     conf.config.email.clone()
 }
 
+fn get_config_sms() -> Sms {
+    let conf = config().inner.lock().unwrap();
+    conf.config.sms.clone()
+}
+
 #[no_mangle]
-pub extern "C" fn ec_confirm_email(
+pub extern "C" fn ec_confirm_otp(
     session_id: &[u8;32],
     cipher_code: *const u8,
     code_size: usize,
-    email_hash: &mut[u8;32],
-    email_seal: &mut[u8;1024],
-    email_seal_size: *mut u32,
+    request_id: *const u8,
+    request_id_size: usize,
+    account_b: *mut u8,
+    max_len: u32,
+    account_b_size: *mut u32,
+    signature: &mut[u8;65]
 ) -> sgx_status_t {
-    let code_slice = unsafe { slice::from_raw_parts(cipher_code, code_size) };
-    info(&format!("code {:?}", &code_slice));
+    let request_id_slice = unsafe { slice::from_raw_parts(request_id, request_id_size) };
+    let request_id = match str::from_utf8(&request_id_slice) {
+        Ok(r) => r,
+        Err(_) => {
+            error("get request id failed");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
     // set tee_key
     let session_r = get_session(session_id);
     if session_r.is_none() {
         return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
     }
     let session = session_r.unwrap();
+
+    let code_slice = unsafe { slice::from_raw_parts(cipher_code, code_size) };
+    info(&format!("code {:?}", &code_slice));
     let code_bytes_r = session.decrypt(code_slice);
     if code_bytes_r.is_err() {
         error("decrypt code failed");
@@ -269,27 +307,52 @@ pub extern "C" fn ec_confirm_email(
         info("confirm code not match, returning");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
-    //when code input equals to code sent, seal email and hash email
+    //when code input equals to code sent, seal and hash account and sign
+    let inner_account = match InnerAccount::from_str(&session.data) {
+        Some(r) => r,
+        None => {
+            error("invalid inner account");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
     let sealed_r = sgx_utils::i_seal(
-        session.data.as_bytes(),
+        inner_account.account.as_bytes(),
         &get_config_seal_key()
     );
     let sealed = match sealed_r {
         Ok(r) => r,
         Err(_) => {
-            error("seal email failed");
+            error("seal account failed");
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
     let sealed_len = sealed.len();
-    let raw_hashed = sgx_utils::hash(session.data.as_bytes()).unwrap();
-    info(&format!("email seal {:?}", sealed));
-    info(&format!("email hash {:?}", raw_hashed));
-    *email_hash = raw_hashed;
-    let mut sealed_1024: [u8;1024] = [0;1024];
-    sealed_1024[..sealed_len].copy_from_slice(&sealed);
-    *email_seal = sealed_1024;
-    unsafe {*email_seal_size = sealed_len.try_into().unwrap()};
+    let raw_hashed = sgx_utils::hash(inner_account.account.as_bytes()).unwrap();
+    info(&format!("account seal {:?}", sealed));
+    info(&format!("account hash {:?}", raw_hashed));
+    let account = Account {
+        auth_type: inner_account.auth_type,
+        acc_seal: os_utils::encode_hex(&sealed),
+        acc_hash: os_utils::encode_hex(&raw_hashed),
+    };
+    let auth = format!("{}/{}/{}",
+        &account.acc_hash,
+        &request_id,
+        &account.auth_type.to_string());
+    let signature_sgx = web3::eth_sign(&auth, get_prv_k());
+    let account_sgx = serde_json::to_vec(&account).unwrap();
+    if account_sgx.len() > max_len as usize {
+        error("account too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    unsafe {
+        ptr::copy_nonoverlapping(
+            account_sgx.as_ptr(), 
+            account_b, 
+            account_sgx.len());
+        *account_b_size = account_sgx.len().try_into().unwrap();
+    }
+    *signature = signature_sgx.try_into().unwrap();
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -298,150 +361,30 @@ fn get_config_seal_key() -> String {
     conf.config.seal_key.clone()
 }
 
-/*
-  ec_register_email decrypts cipher_email and cipher_account,
-  1, generate a random 6 digits, bind with user session
-  2, send the digits to user email
- */
-#[no_mangle]
-pub extern "C" fn ec_send_cipher_sms(
-    session_id: &[u8;32],
-    cipher_sms: *const u8,
-    cipher_sms_size: usize,
-) -> sgx_status_t {
-    info("sgx send cipher email");
-    let sms_slice = unsafe { slice::from_raw_parts(cipher_sms, cipher_sms_size as usize) };
-    let session_r = get_session(session_id);
-    if session_r.is_none() {
-        error(&format!("sgx session {:?} not found.", session_id));
-        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
-    }
-    let mut session = session_r.unwrap();
-    let sms_bytes_r = session.decrypt(sms_slice);
-    if sms_bytes_r.is_err() {
-        error("decrypt email failed");
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let sms_bytes = sms_bytes_r.unwrap();
-    let sms = match str::from_utf8(&sms_bytes) {
-        Ok(r) => r,
-        Err(_) => {
-            info("decrypt bytes to str failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-        }
-    };
-    info(&format!("sms is {}", sms));
-    let r = sgx_utils::rand();
-    //TODO: sendmail error
-    session.code = r.to_string();
-    session.data = sms.to_string();
-    update_session(&session_id, &session);
-    let sms_r = sms::sendsms(
-        &get_config_sms(), 
-        &sms, 
-        &r.to_string());
-    if sms_r.is_err() {
-        error("send sms failed");
-        return sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE;
-    }
-    sgx_status_t::SGX_SUCCESS
-}
 
-fn get_config_sms() -> Sms {
-    let conf = config().inner.lock().unwrap();
-    conf.config.sms.clone()
-}
-
-#[no_mangle]
-pub extern "C" fn ec_confirm_sms(
-    session_id: &[u8;32],
-    cipher_code: *const u8,
-    code_size: usize,
-    sms_hash: &mut[u8;32],
-    sms_seal: &mut[u8;1024],
-    sms_seal_size: *mut u32,
-) -> sgx_status_t {
-    let code_slice = unsafe { slice::from_raw_parts(cipher_code, code_size) };
-    info(&format!("sms code {:?}", &code_slice));
-    // set tee_key
-    let session_r = get_session(session_id);
-    if session_r.is_none() {
-        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
-    }
-    let session = session_r.unwrap();
-    let code_bytes_r = session.decrypt(code_slice);
-    if code_bytes_r.is_err() {
-        error("decrypt code failed");
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let code_bytes = code_bytes_r.unwrap();
-    let code = match str::from_utf8(&code_bytes) {
-        Ok(r) => r,
-        Err(_) => {
-            error("decrypt bytes to str failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-        }
-    };
-    info(&format!("code is {}", &code));
-    info(&format!("session code is {}", &session.code));
-    if !code.eq(&session.code) {
-        info("confirm code not match, returning");
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    //when code input equals to code sent, seal email and hash email
-    let sealed_r = sgx_utils::i_seal(
-        session.data.as_bytes(),
-        &get_config_seal_key()
-    );
-    let sealed = match sealed_r {
-        Ok(r) => r,
-        Err(_) => {
-            error("seal email failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-        }
-    };
-    let sealed_len = sealed.len();
-    let raw_hashed = sgx_utils::hash(session.data.as_bytes()).unwrap();
-    info(&format!("sms seal {:?}", sealed));
-    info(&format!("sms hash {:?}", raw_hashed));
-    *sms_hash = raw_hashed;
-    let mut sealed_1024: [u8;1024] = [0;1024];
-    sealed_1024[..sealed_len].copy_from_slice(&sealed);
-    *sms_seal = sealed_1024;
-    unsafe {*sms_seal_size = sealed_len.try_into().unwrap()};
-    sgx_status_t::SGX_SUCCESS
-}
-
-
-#[no_mangle]
-pub extern "C" fn ec_seal(
-    value: *const u8,
-    value_size: usize,
-    value_hash: &mut[u8;32],
-    value_seal: &mut[u8;1024],
-    value_seal_size: *mut u32,
-) -> sgx_status_t {
-    let value_slice = unsafe { slice::from_raw_parts(value, value_size) };
-    let (sealed, len) = sgx_utils::seal(value_slice);
-    let raw_hashed = sgx_utils::hash(value_slice).unwrap();
-    info(&format!("email seal {:?}", sealed));
-    info(&format!("email hash {:?}", raw_hashed));
-    *value_hash = raw_hashed;
-    *value_seal = sealed;
-    unsafe {*value_seal_size = len};
-    sgx_status_t::SGX_SUCCESS
-}
 
 #[no_mangle]
 pub extern "C" fn ec_auth_oauth(
     session_id: &[u8;32],
     cipher_code: *const u8,
     code_size: usize,
-    auth_type: i32,
-    auth_hash: &mut[u8;32],
-    auth_seal: &mut[u8;1024],
-    auth_seal_size: *mut u32,
+    request_id: *const u8,
+    request_id_size: usize,
+    auth_type_i: i32,
+    account_b: *mut u8,
+    max_len: u32,
+    account_b_size: *mut u32,
+    signature: &mut[u8;65]
 ) -> sgx_status_t {
+    let request_id_slice = unsafe { slice::from_raw_parts(request_id, request_id_size) };
+    let request_id = match str::from_utf8(&request_id_slice) {
+        Ok(r) => r,
+        Err(_) => {
+            error("get request id failed");
+            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        }
+    };
+    // verify session and decrypt code
     let code_slice = unsafe { slice::from_raw_parts(cipher_code, code_size) };
     info(&format!("code {:?}", &code_slice));
     // set tee_key
@@ -463,27 +406,24 @@ pub extern "C" fn ec_auth_oauth(
         }
     };
     info(&format!("oauth code is {}", &code));
+    let auth_type = AuthType::from_int(auth_type_i).unwrap();
     let oauth_result = match auth_type {
-        1 => google_oauth(&get_config_oauth().google, code),
+        AuthType::Google => google_oauth(&get_config_oauth().google, code),
         /* 
         2 => twitter_oauth(&enclave_state.config, code),
         3 => discord_oauth(&enclave_state.config, code),
         4 => telegram_oauth(&enclave_state.config, code),
         */
-        5 => github_oauth(&get_config_oauth().github, code),
+        AuthType::Github => github_oauth(&get_config_oauth().github, code),
         _ => Err(GenericError::from("error type"))
     };
     if oauth_result.is_err() {
         return sgx_status_t::SGX_ERROR_INVALID_FUNCTION;
     }
     let auth_account = oauth_result.unwrap();
-    let auth_account_with_type = format!(
-        "{}@{}", 
-        auth_account, 
-        auth_type.to_string());
-    info(&format!("auth account is {}", &auth_account_with_type));
+    info(&format!("auth account is {}", &auth_account));
     let sealed_r = sgx_utils::i_seal(
-        auth_account_with_type.as_bytes(),
+        auth_account.as_bytes(),
         &get_config_seal_key()
     );
     let sealed = match sealed_r {
@@ -495,12 +435,29 @@ pub extern "C" fn ec_auth_oauth(
     };
     let sealed_len = sealed.len();
     let raw_hashed = sgx_utils::hash(auth_account.as_bytes()).unwrap();
-    info(&format!("auth account seal {:?}", sealed));
-    info(&format!("auth account hash {:?}", raw_hashed));
-    *auth_hash = raw_hashed;
-    let sealed_1024: [u8;1024] = sealed.try_into().unwrap();
-    *auth_seal = sealed_1024;
-    unsafe {*auth_seal_size = sealed_len.try_into().unwrap()};
+    let account = Account {
+        auth_type: auth_type,
+        acc_seal: os_utils::encode_hex(&sealed),
+        acc_hash: os_utils::encode_hex(&raw_hashed),
+    };
+    let auth = format!("{}/{}/{}",
+        &account.acc_hash,
+        &request_id,
+        &account.auth_type.to_string());
+    let signature_sgx = web3::eth_sign(&auth, get_prv_k());
+    let account_sgx = serde_json::to_vec(&account).unwrap();
+    if account_sgx.len() > max_len as usize {
+        error("account too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    unsafe {
+        ptr::copy_nonoverlapping(
+            account_sgx.as_ptr(), 
+            account_b, 
+            account_sgx.len());
+        *account_b_size = account_sgx.len().try_into().unwrap();
+    }
+    *signature = signature_sgx.try_into().unwrap();
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -518,7 +475,7 @@ pub extern "C" fn ec_sign_auth(
     signature: &mut [u8;65]
 ) -> sgx_status_t {
     info(&format!("sign with hash {:?} and seq {}", auth_hash, auth_id));
-    let prv_k = get_prv_k();
+    let prv_k: sgx_ec256_private_t = get_prv_k();
     let pub_k_k1 = get_pub_k_k1();
     let msg_sha = web3::gen_auth_bytes(
         &pub_k_k1, 
