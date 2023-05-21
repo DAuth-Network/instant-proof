@@ -21,7 +21,7 @@ create table auth (
     acc_auth_seq int not null,  /* auth seq or nonce */
     audience varchar(128), /* client_name*/
     auth_datetime datetime,
-    auth_exp SERIAL,
+    auth_exp BIGINT,
     request_id varchar(32),
     INDEX i_date using btree(auth_datetime),
     INDEX i_account using hash(acc_hash),

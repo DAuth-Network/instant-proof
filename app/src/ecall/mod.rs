@@ -46,7 +46,8 @@ extern {
         account_b: *mut u8,
         max_len: usize,
         account_b_size: *mut usize,
-        signature: &mut [u8;65]
+        cipher_dauth: *mut u8,
+        cipher_dauth_size: *mut usize,
     ) -> sgx_status_t;
 
     pub fn ec_auth_oauth(
@@ -61,7 +62,8 @@ extern {
         account_b: *mut u8,
         max_len: usize,
         account_b_size: *mut usize,
-        signature: &mut [u8;65]
+        cipher_dauth: *mut u8,
+        cipher_dauth_size: *mut usize,
     ) -> sgx_status_t;
 
 

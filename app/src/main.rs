@@ -159,6 +159,7 @@ async fn main() -> std::io::Result<()> {
     let enclave = init_enclave_and_set_conf(
         conf.to_tee_config(
             env::var("RSA_KEY").unwrap(),
+            env::var("ECDSA_KEY").unwrap(),
             env::var("SEAL_KEY").unwrap(),
     ));
     let rsa_pub_key = parse_jwk(env::var("RSA_PUB_KEY").unwrap());

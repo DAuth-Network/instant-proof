@@ -6,9 +6,10 @@ use std::vec::Vec;
 use sgx_types::*;
 
 
-pub fn eth_sign(msg: &str, prv_k: sgx_ec256_private_t) -> Vec<u8>{
+pub fn eth_sign(msg: &str, prv_k: String) -> Vec<u8>{
     let msg_sha = eth_message(msg);
-    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k.r).unwrap();
+    let prv_k_b = decode_hex(&prv_k).unwrap();
+    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
     let last_byte = r_id.serialize() + 27;

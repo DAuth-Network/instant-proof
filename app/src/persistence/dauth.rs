@@ -97,8 +97,8 @@ impl Auth {
             auth_id: 0,
             auth_datetime: utils::now_datetime().unwrap(),
             auth_exp: 0,
-            audience,
-            request_id,
+            audience: audience,
+            request_id: request_id,
         }
     }
 }

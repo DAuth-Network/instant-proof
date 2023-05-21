@@ -41,6 +41,7 @@ pub struct TeeConfig {
     pub oauth: OAuth,
     pub sms: Sms,
     pub rsa_key: String,
+    pub ecdsa_key: String,
     pub seal_key: String
 }
 
@@ -54,6 +55,7 @@ impl TeeConfig {
                 github: OAuthClient::default(), 
                 google: OAuthClient::default() },
             rsa_key: emp(),
+            ecdsa_key: emp(),
             seal_key: emp(),
         }
     }
@@ -137,11 +139,13 @@ fn test_oauth_creation() {
 fn test_tee_config_creation() {
     let tee_config = TeeConfig {
         email: Email::default(),
+        sms: Sms::default(),
         oauth: OAuth {
             github: OAuthClient::default(),
             google: OAuthClient::default(),    
         },
         rsa_key: "".to_string(),
+        ecdsa_key: emp(),
         seal_key: "".to_string(),
     };
     assert_eq!(tee_config.email.account, "");

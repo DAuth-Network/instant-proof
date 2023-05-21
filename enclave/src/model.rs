@@ -2,13 +2,58 @@ extern crate  serde;
 use serde::{Deserialize, Serialize};
 use std::string::*;
 use std::fmt::*;
+use std::vec::*;
+use super::os_utils::*;
 
+pub trait ToJsonBytes {
+    fn to_json_bytes(&self) -> Vec<u8> where Self: Serialize {   
+        serde_json::to_vec(&self).unwrap()
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
     pub auth_type: AuthType
+}
+
+impl ToJsonBytes for Account {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DAuth {
+    pub account: String,
+    pub auth_type: AuthType,
+    pub request_id: String,
+}
+
+impl DAuth {
+    pub fn new(account: &Account, req_id: String) -> Self {
+        Self {
+            account: account.acc_hash.to_string(),
+            auth_type: account.auth_type,
+            request_id: req_id
+        }
+    }
+    pub fn to_string(&self) -> String {
+        format!("{}:{}:{}", self.auth_type.to_string(), self.account, self.request_id)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DAuthEthSigned {
+    pub auth: DAuth,
+    pub signature: String
+}
+
+impl ToJsonBytes for DAuthEthSigned {}
+impl DAuthEthSigned {
+    pub fn new(dauth: DAuth, signed: &[u8]) -> Self {
+        Self {
+            auth: dauth,
+            signature: encode_hex(&signed)
+        }
+    }
 }
 
 pub struct InnerAccount {

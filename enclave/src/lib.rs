@@ -31,6 +31,7 @@ use std::convert::TryInto;
 use config::*;
 use http_req::uri::Authority;
 use jsonwebtoken::crypto::sign;
+use os_utils::encode_hex;
 use serde::{Deserialize, Serialize};
 use sgx_trts::enclave;
 use sgx_types::*;
@@ -269,7 +270,8 @@ pub extern "C" fn ec_confirm_otp(
     account_b: *mut u8,
     max_len: u32,
     account_b_size: *mut u32,
-    signature: &mut[u8;65]
+    cipher_dauth: *mut u8,
+    cipher_dauth_size: *mut u32,
 ) -> sgx_status_t {
     let request_id_slice = unsafe { slice::from_raw_parts(request_id, request_id_size) };
     let request_id = match str::from_utf8(&request_id_slice) {
@@ -335,14 +337,19 @@ pub extern "C" fn ec_confirm_otp(
         acc_seal: os_utils::encode_hex(&sealed),
         acc_hash: os_utils::encode_hex(&raw_hashed),
     };
-    let auth = format!("{}/{}/{}",
-        &account.acc_hash,
-        &request_id,
-        &account.auth_type.to_string());
-    let signature_sgx = web3::eth_sign(&auth, get_prv_k());
-    let account_sgx = serde_json::to_vec(&account).unwrap();
+    let auth = DAuth::new(&account, request_id.to_string());
+    let signature_b = web3::eth_sign(&auth.to_string(), get_config_edcsa_key());
+    let account_sgx = account.to_json_bytes();
+    let dauth_signed = DAuthEthSigned::new(auth, &signature_b);
+    let cipher_dauth_b = session.encrypt(&dauth_signed.to_json_bytes());
+    info(&format!("dauth is {:?}", &dauth_signed));
+    info(&format!("cipher dauth is {:?}", &cipher_dauth_b));
     if account_sgx.len() > max_len as usize {
         error("account too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    if cipher_dauth_b.len() > max_len as usize {
+        error("auth too long");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     unsafe {
@@ -351,8 +358,12 @@ pub extern "C" fn ec_confirm_otp(
             account_b, 
             account_sgx.len());
         *account_b_size = account_sgx.len().try_into().unwrap();
+        ptr::copy_nonoverlapping(
+            cipher_dauth_b.as_ptr(),
+            cipher_dauth,
+            cipher_dauth_b.len());
+        *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
     }
-    *signature = signature_sgx.try_into().unwrap();
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -361,7 +372,10 @@ fn get_config_seal_key() -> String {
     conf.config.seal_key.clone()
 }
 
-
+fn get_config_edcsa_key() -> String {
+    let conf = config().inner.lock().unwrap();
+    conf.config.ecdsa_key.clone()
+}
 
 #[no_mangle]
 pub extern "C" fn ec_auth_oauth(
@@ -374,7 +388,8 @@ pub extern "C" fn ec_auth_oauth(
     account_b: *mut u8,
     max_len: u32,
     account_b_size: *mut u32,
-    signature: &mut[u8;65]
+    cipher_dauth: *mut u8,
+    cipher_dauth_size: *mut u32,
 ) -> sgx_status_t {
     let request_id_slice = unsafe { slice::from_raw_parts(request_id, request_id_size) };
     let request_id = match str::from_utf8(&request_id_slice) {
@@ -440,14 +455,17 @@ pub extern "C" fn ec_auth_oauth(
         acc_seal: os_utils::encode_hex(&sealed),
         acc_hash: os_utils::encode_hex(&raw_hashed),
     };
-    let auth = format!("{}/{}/{}",
-        &account.acc_hash,
-        &request_id,
-        &account.auth_type.to_string());
-    let signature_sgx = web3::eth_sign(&auth, get_prv_k());
-    let account_sgx = serde_json::to_vec(&account).unwrap();
+    let auth = DAuth::new(&account, request_id.to_string());
+    let signature_b = web3::eth_sign(&auth.to_string(), get_config_edcsa_key());
+    let account_sgx = account.to_json_bytes();
+    let dauth_signed = DAuthEthSigned::new(auth, &signature_b);
+    let cipher_dauth_b = session.encrypt(&dauth_signed.to_json_bytes());
     if account_sgx.len() > max_len as usize {
         error("account too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    if cipher_dauth_b.len() > max_len as usize {
+        error("auth too long");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     unsafe {
@@ -456,8 +474,13 @@ pub extern "C" fn ec_auth_oauth(
             account_b, 
             account_sgx.len());
         *account_b_size = account_sgx.len().try_into().unwrap();
+        ptr::copy_nonoverlapping(
+            cipher_dauth_b.as_ptr(),
+            cipher_dauth,
+            cipher_dauth_b.len());
+        *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
+
     }
-    *signature = signature_sgx.try_into().unwrap();
     sgx_status_t::SGX_SUCCESS
 }
 

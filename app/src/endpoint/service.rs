@@ -38,7 +38,6 @@ pub struct BaseResp {
     error_msg: String
 }
 
-
 fn fail_resp(err: DAuthError) -> HttpResponse {
     HttpResponse::Ok().json(BaseResp {
         status: FAIL.to_string(),
@@ -292,7 +291,7 @@ pub struct AuthOtpConfirmReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthSuccessResp {
     status: String,
-    cipher_token: String
+    cipher_dauth: String
 }
 
 #[post("/auth_otp_confirm")]
@@ -338,11 +337,11 @@ pub async fn auth_otp_confirm(
     let e = &endex.enclave;
     let pool = &endex.thread_pool;
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-
-    let mut account_b = [0_u8;1024];
+    const max_len: usize = 512;
+    let mut account_b = [0_u8;max_len];
     let mut account_b_size = 0;
-    let mut signature_b = [0_u8;65];
-    let mut signature_b_size = 0;
+    let mut cipher_dauth = [0_u8;max_len];
+    let mut cipher_dauth_size = 0;
     let result = pool.install(|| {
         unsafe {
             ecall::ec_confirm_otp(
@@ -354,9 +353,10 @@ pub async fn auth_otp_confirm(
                 request_id_b.as_ptr() as *const u8,
                 request_id_b.len(),
                 account_b.as_ptr() as *mut u8,
-                1024,
+                max_len,
                 &mut account_b_size,
-                &mut signature_b
+                cipher_dauth.as_ptr() as *mut u8,
+                &mut cipher_dauth_size,
             )
         }
     });
@@ -381,12 +381,15 @@ pub async fn auth_otp_confirm(
     }
     let account_slice = &account_b[0..account_b_size];
     let account = serde_json::from_slice(account_slice).unwrap();
+    let dauth_slice = &cipher_dauth[0..cipher_dauth_size];
+    info!("dauth slice {:?}", &dauth_slice);
+    info!("dauth size {}", cipher_dauth_size);
     let insert_r = insert_account_if_new(&endex.db_pool, &account);
     if insert_r.is_err() {
         error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
-    let auth = Auth::new(&account, request_id, client_name.unwrap());
+    let auth = Auth::new(&account, client_name.unwrap(), request_id);
     let insert_auth_r = insert_auth(&endex.db_pool, auth);
     if insert_auth_r.is_err() {
         error!("insert auth error {}", insert_auth_r.err().unwrap());
@@ -395,7 +398,7 @@ pub async fn auth_otp_confirm(
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            cipher_token: hex::encode(signature_b)
+            cipher_dauth: hex::encode(dauth_slice)
         }
     )
 }
@@ -454,8 +457,8 @@ pub async fn auth_oauth(
 
     let mut account_b = [0_u8;1024];
     let mut account_b_size = 0;
-    let mut signature_b = [0_u8;65];
-    let mut signature_b_size = 0;
+    let mut cipher_dauth = [0_u8;1024];
+    let mut cipher_dauth_size = 0;
 
     let result = pool.install(|| {
         unsafe {
@@ -471,7 +474,8 @@ pub async fn auth_oauth(
                 account_b.as_ptr() as *mut u8,
                 1024,
                 &mut account_b_size,
-                &mut signature_b
+                cipher_dauth.as_ptr() as *mut u8,
+                &mut cipher_dauth_size,
             )
         }
     });
@@ -503,12 +507,13 @@ pub async fn auth_oauth(
     }
     let account_slice = &account_b[0..account_b_size];
     let account = serde_json::from_slice(account_slice).unwrap();
+    let dauth_slice = &cipher_dauth[0..cipher_dauth_size];
     let insert_r = insert_account_if_new(&endex.db_pool, &account);
     if insert_r.is_err() {
         error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(DAuthError::DbError);
     }
-    let auth = Auth::new(&account, request_id, client_name.unwrap());
+    let auth = Auth::new(&account, client_name.unwrap(), request_id);
     let insert_auth_r = insert_auth(&endex.db_pool, auth);
     if insert_auth_r.is_err() {
         error!("insert auth error {}", insert_auth_r.err().unwrap());
@@ -517,7 +522,7 @@ pub async fn auth_oauth(
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            cipher_token: hex::encode(signature_b)
+            cipher_dauth: hex::encode(dauth_slice)
         }
     )
 }
