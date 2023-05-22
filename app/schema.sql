@@ -1,5 +1,5 @@
-create database dapi;
-use dapi;
+create database dapi_ip;
+use dapi_ip;
 
 
 drop table if exists account;

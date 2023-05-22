@@ -131,17 +131,19 @@ impl AuthType {
         }
     }
 
-    pub fn to_string(self) -> String {
-        match self {
-            AuthType::Email => "email".to_string(),
-            AuthType::Sms => "sms".to_string(),
-            AuthType::Google => "google".to_string(),
-            AuthType::Twitter => "twitter".to_string(),
-            AuthType::Discord => "discord".to_string(),
-            AuthType::Telegram => "telegram".to_string(),
-            AuthType::Github => "github".to_string(),
-        }
-    }
 }
 
 
+impl Display for AuthType {
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            AuthType::Email => write!(f, "email"),
+            AuthType::Sms => write!(f, "sms"),
+            AuthType::Google => write!(f, "google"),
+            AuthType::Twitter => write!(f, "twitter"),
+            AuthType::Discord => write!(f, "discord"),
+            AuthType::Telegram => write!(f, "telegram"),
+            AuthType::Github => write!(f, "github"),
+        }
+    }
+}

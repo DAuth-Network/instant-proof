@@ -159,8 +159,8 @@ pub async fn exchange_key(
 pub struct AuthOtpReq {
     client_id: String,
     session_id: String,
-    cipher_channel: String,
-    auth_type: String,
+    cipher_account: String,
+    account_type: String,
     request_id: Option<String>
 }
 
@@ -227,7 +227,7 @@ pub async fn auth_otp(
     let session_id_b: [u8;32] = hex::decode(&req.session_id).unwrap().try_into().unwrap();
 
     let c_channel = CipherContent {
-        content: req.cipher_channel.clone(),
+        content: req.cipher_account.clone(),
     };
     let c_channel_b = match c_channel.as_bytes() {
         Ok(b) => b,
@@ -236,7 +236,7 @@ pub async fn auth_otp(
             return fail_resp(DAuthError::DataError);
         }
     };
-    let auth_type = AuthType::from_str(&req.auth_type);
+    let auth_type = AuthType::from_str(&req.account_type);
     if auth_type.is_none() {
         return fail_resp(DAuthError::DataError);
     }
