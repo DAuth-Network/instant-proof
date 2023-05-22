@@ -169,7 +169,8 @@ async fn main() -> std::io::Result<()> {
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_client(&client_db).unwrap(),
-        env: Env::from_str(&conf.api.env).unwrap()
+        env: Env::from_str(&conf.api.env).unwrap(),
+        port: conf.api.port
         // conf: conf.clone()
     });
     // ustate stores user state information e.g. confirmation code that sends

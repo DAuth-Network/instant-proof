@@ -84,6 +84,7 @@ impl InnerAccount {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AuthType {
     Email = 0,
     Sms = 1,

@@ -70,6 +70,7 @@ pub struct AppState {
     pub db_pool: Pool,
     pub clients: Vec<Client>,
     pub env: Env,
+    pub port: u16,
     // pub conf: HashMap<String, String>
 }
 
@@ -291,7 +292,7 @@ pub struct AuthOtpConfirmReq {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AuthSuccessResp {
     status: String,
-    cipher_dauth: String
+    data: String
 }
 
 #[post("/auth_otp_confirm")]
@@ -398,7 +399,7 @@ pub async fn auth_otp_confirm(
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            cipher_dauth: hex::encode(dauth_slice)
+            data: hex::encode(dauth_slice)
         }
     )
 }
@@ -522,7 +523,7 @@ pub async fn auth_oauth(
     json_resp(
         AuthSuccessResp{
             status: SUCC.to_string(),
-            cipher_dauth: hex::encode(dauth_slice)
+            data: hex::encode(dauth_slice)
         }
     )
 }
@@ -532,7 +533,7 @@ pub async fn auth_oauth(
 pub async fn health(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("dauth sdk is up and running");
-    HttpResponse::Ok().body("dauth sdk is up and running!")
+    HttpResponse::Ok().body(format!("{} is up!", endex.port))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
