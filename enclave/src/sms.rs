@@ -37,11 +37,11 @@ pub fn sendsms(conf: &Sms, to_account:&str, c_code: &str) -> GenericResult<()> {
     if v["status"].is_null() {
         return Err(GenericError::from("send sms got an empty response"));
     }
-    let status = v["status"].clone().to_string();
+    let status = v["status"].as_str().unwrap();
     info(&status);
-    match status.as_str() {
+    match status {
         "queued" => Ok(()),
-        "sent" => Ok(()),
+        "sent" => Ok(()), 
         _ => {
             error(&format!("sms failed: {:?}", v));
             Err(GenericError::from("sms failed"))
