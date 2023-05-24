@@ -26,9 +26,10 @@ mod ecall;
 mod endpoint;
 mod persistence;
 mod ocall;
+mod dconfig;
 
 use endpoint::service::*;
-use endpoint::config::*;
+use dconfig::*;
 use persistence::dclient::*;
 use config::Config;
 use std::collections::HashMap;
@@ -169,9 +170,8 @@ async fn main() -> std::io::Result<()> {
         thread_pool: pool,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_client(&client_db).unwrap(),
-        env: Env::from_str(&conf.api.env).unwrap(),
+        env: conf.api.env.clone(),
         port: conf.api.port
-        // conf: conf.clone()
     });
     // ustate stores user state information e.g. confirmation code that sends
     // to user's mailbox.
@@ -203,12 +203,10 @@ async fn main() -> std::io::Result<()> {
                 .service(health)
             );
         // load index.html for testing only when env is dev
-        let env = &conf.api.env;
-        if env.eq("dev") {
-            app.service(afs::Files::new("/", "./public").index_file("index.html"))
-        } else {
-            app
-        }
+        match conf.api.env {
+            Env::TEST => app.service(afs::Files::new("/", "./public").index_file("index.html")),
+            _ => app
+        } 
     })
     .workers(workers);
     // uncomment to enable https

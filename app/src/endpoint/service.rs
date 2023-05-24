@@ -15,6 +15,7 @@ use sgx_types::*;
 use sgx_urts::SgxEnclave;
 use mysql::*;
 use crate::ecall;
+use crate::dconfig::*;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
 use crate::endpoint::utils;
@@ -22,7 +23,7 @@ use crate::endpoint::session;
 
 use super::err::*;
 use super::session::SessionState;
-use super::config::*;
+
 
 static SUCC: &'static str = "success";
 static FAIL: &'static str = "fail";
