@@ -39,6 +39,7 @@ pub fn sendsms(conf: &Sms, to_account:&str, c_code: &str) -> GenericResult<()> {
     }
     let status = v["status"].clone().to_string();
     match status.as_str() {
+        "queued" => Ok(()),
         "sent" => Ok(()),
         _ => {
             error(&format!("sms failed: {:?}", v));
