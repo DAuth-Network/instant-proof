@@ -35,9 +35,10 @@ pub fn sendsms(conf: &Sms, to_account:&str, c_code: &str) -> GenericResult<()> {
     }
     let v: Value = serde_json::from_str(&sms_resp?)?;
     if v["status"].is_null() {
-        return Err(GenericError::from("github oauth failed"));
+        return Err(GenericError::from("send sms got an empty response"));
     }
     let status = v["status"].clone().to_string();
+    info(&status);
     match status.as_str() {
         "queued" => Ok(()),
         "sent" => Ok(()),

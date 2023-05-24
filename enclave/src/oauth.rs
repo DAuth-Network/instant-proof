@@ -141,11 +141,11 @@ pub fn http_req(
                 error("http post failed");
                 info(&format!("http status {}", response.status_code()));
                 let body = String::from_utf8_lossy(&writer);
-                info(&format!("access token response is {}", body));
+                info(&format!("http response is {}", body));
                 return Err(GenericError::from(body));
             }
             let body = String::from_utf8_lossy(&writer);
-            info(&format!("access token response is {}", body));
+            info(&format!("http response is {}", body));
             return Ok(body.to_string());
         },
         Err(err) => {
