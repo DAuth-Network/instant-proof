@@ -1,5 +1,5 @@
-use std::time::SystemTime;
 use rand::{thread_rng, Rng};
+use std::time::SystemTime;
 #[macro_use]
 use time::{PrimitiveDateTime, format_description};
 use chrono::prelude::*;
@@ -7,7 +7,6 @@ use std::boxed::Box;
 
 // pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
 // pub type GenericResult<T> = Result<T, GenericError>;
-
 
 /// Get system time now in u64 format
 pub fn system_time() -> u64 {
@@ -17,16 +16,16 @@ pub fn system_time() -> u64 {
     }
 }
 
-
 pub fn now_datetime() -> Option<PrimitiveDateTime> {
     let now = Local::now();
     let now_datetime = format!("{}", now.format("%Y-%m-%d %H:%M:%S"));
-    let format = format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").unwrap();
+    let format =
+        format_description::parse("[year]-[month]-[day] [hour]:[minute]:[second]").unwrap();
     let current_datetime = PrimitiveDateTime::parse(&now_datetime, &format);
     if current_datetime.is_err() {
-        return None
+        return None;
     } else {
-        return Some(current_datetime.unwrap())
+        return Some(current_datetime.unwrap());
     }
 }
 
@@ -35,7 +34,6 @@ pub fn gen_random() -> i32 {
     let mut rng = thread_rng();
     rng.gen_range(1000..9999)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -47,5 +45,4 @@ mod tests {
         let future = system_time();
         assert!(current <= future);
     }
-
 }

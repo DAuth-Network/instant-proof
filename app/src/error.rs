@@ -1,9 +1,5 @@
-use std::boxed::Box;
 use std::error;
 use std::fmt;
-
-pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
-pub type GenericResult<T> = Result<T, GenericError>;
 
 #[derive(Clone, Debug)]
 pub struct Error {
@@ -24,20 +20,6 @@ impl Error {
         match ErrorKind::from_int(error_code) {
             Some(kind) => Some(Error::new(kind)),
             None => None,
-        }
-    }
-
-    pub fn to_int(&self) -> u8 {
-        match self.kind {
-            ErrorKind::ClientError => 0,
-            ErrorKind::DecryptError => 1,
-            ErrorKind::SendChannelError => 2,
-            ErrorKind::OAuthCodeError => 3,
-            ErrorKind::OAuthProfileError => 4,
-            ErrorKind::SessionError => 5,
-            ErrorKind::DataError => 6,
-            ErrorKind::SgxError => 7,
-            ErrorKind::DbError => 8,
         }
     }
 }

@@ -1,23 +1,22 @@
 #![crate_name = "enclave"]
 #![crate_type = "staticlib"]
-
 #![cfg_attr(not(target_env = "sgx"), no_std)]
 #![cfg_attr(target_env = "sgx", feature(rustc_private))]
 
-extern crate sgx_types;
+extern crate jsonwebtoken;
+extern crate libsecp256k1;
 extern crate sgx_tcrypto;
 extern crate sgx_trts;
 extern crate sgx_tseal;
+extern crate sgx_types;
 extern crate tiny_keccak;
-extern crate libsecp256k1;
-extern crate jsonwebtoken;
 
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
 extern crate sgx_tstd as std;
+extern crate http_req;
 extern crate serde;
 extern crate serde_json;
-extern crate http_req;
 extern crate sgx_rand;
 
 #[macro_use]
@@ -26,16 +25,15 @@ extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
 extern crate sgx_tseal;
 
-
-use std::convert::TryInto;
 use config::*;
 use http_req::uri::Authority;
 use jsonwebtoken::crypto::sign;
-use os_utils::encode_hex;
+use os_utils::{decode_hex, encode_hex};
 use serde::{Deserialize, Serialize};
+use sgx_tcrypto::*;
 use sgx_trts::enclave;
 use sgx_types::*;
-use sgx_tcrypto::*;
+use std::convert::TryInto;
 
 use std::mem::MaybeUninit;
 use std::slice;
@@ -47,35 +45,34 @@ use std::os::raw::c_char;
 use std::string::{String, ToString};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
+use std::ptr;
 use std::str;
 use std::vec::Vec;
-use std::ptr;
 
-pub mod sgx_utils;
-pub mod os_utils;
-pub mod err;
-pub mod session;
-pub mod web3;
 pub mod config;
-pub mod oauth;
+pub mod err;
 pub mod log;
-pub mod sms;
 pub mod model;
+pub mod oauth;
+pub mod os_utils;
+pub mod session;
+pub mod sgx_utils;
+pub mod sms;
+pub mod web3;
 
 use self::err::*;
-use self::session::*;
 use self::log::*;
 use self::model::*;
+use self::session::*;
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
-use libsecp256k1::{SecretKey, PublicKey};
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
-
 
 // EnclaveState includes session state that constatntly changes
 struct EnclaveState {
     sessions: Sessions,
-    pub_k_r1: [u8;64],
-    pub_k_k1: [u8;65],
+    pub_k_r1: [u8; 64],
+    pub_k_k1: [u8; 65],
 }
 
 // EnclaveConfig includes config set once and never changes
@@ -146,8 +143,8 @@ fn config() -> &'static ConfigReader {
 #[no_mangle]
 pub extern "C" fn ec_key_exchange(
     user_key: *const u8,
-    tee_key: &mut [u8;64],
-    session_id: &mut [u8;32],
+    tee_key: &mut [u8; 64],
+    session_id: &mut [u8; 32],
 ) -> sgx_status_t {
     // set tee_key
     let user_key_slice = unsafe { slice::from_raw_parts(user_key, 64) };
@@ -157,7 +154,7 @@ pub extern "C" fn ec_key_exchange(
     let sid = register_session(user_key_slice);
     *tee_key = pub_k_r1;
     *session_id = sid.try_into().unwrap();
-    if sid == [0;32] {
+    if sid == [0; 32] {
         // unable to calculate share key for the given public key
         sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE
     } else {
@@ -165,17 +162,13 @@ pub extern "C" fn ec_key_exchange(
     }
 }
 
-fn get_pub_k_r1() -> [u8;64] {
-    let state = state().inner.lock().unwrap();
+fn get_pub_k_r1() -> [u8; 64] {
+    let state: std::sync::SgxMutexGuard<EnclaveState> = state().inner.lock().unwrap();
     state.pub_k_r1.clone()
 }
 
-
 #[no_mangle]
-pub extern "C" fn ec_set_conf(
-    config_b: *const u8,
-    config_b_size: usize
-) -> sgx_status_t {
+pub extern "C" fn ec_set_conf(config_b: *const u8, config_b_size: usize) -> sgx_status_t {
     let config_slice = unsafe { slice::from_raw_parts(config_b, config_b_size) };
     let new_config = serde_json::from_slice(config_slice).unwrap();
     info(&format!("sgx config {:?}", &new_config));
@@ -184,68 +177,93 @@ pub extern "C" fn ec_set_conf(
 }
 
 /*
-  ec_register_email decrypts cipher_email and cipher_account,
-  1, generate a random 6 digits, bind with user session
-  2, send the digits to user email
- */
+ ec_register_email decrypts cipher_email and cipher_account,
+ 1, generate a random 6 digits, bind with user session
+ 2, send the digits to user email
+*/
 #[no_mangle]
 pub extern "C" fn ec_send_otp(
-    auth_type_i: i32,
-    session_id: &[u8;32],
-    cipher_channel: *const u8,
-    cipher_channel_size: usize,
+    otp_req: *const u8,
+    otp_req_size: usize,
+    error_code: &mut u8,
 ) -> sgx_status_t {
     info("sgx send otp");
-    let channel_slice = unsafe { 
-        slice::from_raw_parts(cipher_channel, cipher_channel_size as usize) 
-    };
-    let session_r = get_session(session_id);
+    let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
+    let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
+    // verify session
+    let session_id_r = decode_hex(&req.session_id);
+    if session_id_r.is_err() {
+        error("decode session id failed");
+        unsafe {
+            *error_code = Error::new(ErrorKind::SessionError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    let session_id: [u8; 32] = session_id_r.unwrap().try_into().unwrap();
+    let session_r = get_session(&session_id);
     if session_r.is_none() {
         error(&format!("sgx session {:?} not found.", session_id));
-        return sgx_status_t::SGX_ERROR_AE_SESSION_INVALID;
+        unsafe {
+            *error_code = Error::new(ErrorKind::SessionError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
     }
     let mut session = session_r.unwrap();
-    let channel_bytes_r = session.decrypt(channel_slice);
-    if channel_bytes_r.is_err() {
-        error("decrypt email failed");
-        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
-    }
-    let channel_bytes = channel_bytes_r.unwrap();
-    let channel = match str::from_utf8(&channel_bytes) {
-        Ok(r) => r,
-        Err(_) => {
-            info("decrypt bytes to str failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    // verify account
+    let cipher_account_b_r = decode_hex(&req.cipher_account);
+    if cipher_account_b_r.is_err() {
+        error("decode account failed");
+        unsafe {
+            *error_code = Error::new(ErrorKind::DataError).to_int();
         }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    let cipher_account_b = cipher_account_b_r.unwrap();
+    let account_b_r = session.decrypt(&cipher_account_b);
+    if account_b_r.is_err() {
+        error("decrypt otp account failed");
+        unsafe {
+            *error_code = Error::new(ErrorKind::DataError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    let account_b = account_b_r.unwrap();
+    let account_r = str::from_utf8(&account_b);
+    if account_r.is_err() {
+        error("decrypt bytes to str failed");
+        unsafe {
+            *error_code = Error::new(ErrorKind::DataError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
     };
-    info(&format!("channel is {}", channel));
+    let account = account_r.unwrap();
+    info(&format!("otp account is {}", account));
     let otp = sgx_utils::rand();
     //TODO: sendmail error
-    let auth_type = AuthType::from_int(auth_type_i).unwrap();
     session.code = otp.to_string();
     let inner_account = InnerAccount {
-        account: channel.to_string(),
-        auth_type: auth_type,
+        account: account.to_string(),
+        auth_type: req.auth_type,
     };
     session.data = inner_account.to_str();
     update_session(&session_id, &session);
-    let send_r = match auth_type {
-        AuthType::Email => os_utils::sendmail(
-            &get_config_email(), 
-            &channel, 
-            &otp.to_string()),
-        AuthType::Sms => sms::sendsms(
-            &get_config_sms(), 
-            &channel, 
-            &otp.to_string()),
+    let send_r = match req.auth_type {
+        AuthType::Email => os_utils::sendmail(&get_config_email(), &account, &otp.to_string()),
+        AuthType::Sms => sms::sendsms(&get_config_sms(), &account, &otp.to_string()),
         _ => {
             error("invalid auth type");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+            unsafe {
+                *error_code = Error::new(ErrorKind::DataError).to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
         }
     };
     if send_r.is_err() {
         error("send otp failed");
-        return sgx_status_t::SGX_ERROR_SERVICE_UNAVAILABLE;
+        unsafe {
+            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
     }
     sgx_status_t::SGX_SUCCESS
 }
@@ -261,20 +279,31 @@ fn get_config_sms() -> Sms {
 }
 
 #[no_mangle]
-pub extern "C" fn ec_confirm_otp(
-    session_id: &[u8;32],
-    cipher_code: *const u8,
-    code_size: usize,
-    request_id: *const u8,
-    request_id_size: usize,
-    account_b: *mut u8,
+pub extern "C" fn ec_auth_in_one(
+    auth_req: *const u8,
+    auth_req_size: usize,
     max_len: u32,
+    account_b: *mut u8,
     account_b_size: *mut u32,
     cipher_dauth: *mut u8,
     cipher_dauth_size: *mut u32,
+    error_code: &mut u8,
 ) -> sgx_status_t {
-    let request_id_slice = unsafe { slice::from_raw_parts(request_id, request_id_size) };
-    let request_id = match str::from_utf8(&request_id_slice) {
+    // get request
+    let req_slice = unsafe { slice::from_raw_parts(auth_req, auth_req_size) };
+    let req_r = serde_json::from_slice(req_slice);
+    if req_r.is_err() {
+        error("invalid auth type");
+        unsafe {
+            *error_code = Error::new(ErrorKind::DataError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    let req: AuthIn = req_r.unwrap();
+
+    //verify and get session
+
+    let request_id = match str::from_utf8(&req_slice) {
         Ok(r) => r,
         Err(_) => {
             error("get request id failed");
@@ -317,10 +346,7 @@ pub extern "C" fn ec_confirm_otp(
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
-    let sealed_r = sgx_utils::i_seal(
-        inner_account.account.as_bytes(),
-        &get_config_seal_key()
-    );
+    let sealed_r = sgx_utils::i_seal(inner_account.account.as_bytes(), &get_config_seal_key());
     let sealed = match sealed_r {
         Ok(r) => r,
         Err(_) => {
@@ -328,7 +354,6 @@ pub extern "C" fn ec_confirm_otp(
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
-    let sealed_len = sealed.len();
     let raw_hashed = sgx_utils::hash(inner_account.account.as_bytes()).unwrap();
     info(&format!("account seal {:?}", sealed));
     info(&format!("account hash {:?}", raw_hashed));
@@ -353,17 +378,12 @@ pub extern "C" fn ec_confirm_otp(
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     unsafe {
-        ptr::copy_nonoverlapping(
-            account_sgx.as_ptr(), 
-            account_b, 
-            account_sgx.len());
+        ptr::copy_nonoverlapping(account_sgx.as_ptr(), account_b, account_sgx.len());
         *account_b_size = account_sgx.len().try_into().unwrap();
-        ptr::copy_nonoverlapping(
-            cipher_dauth_b.as_ptr(),
-            cipher_dauth,
-            cipher_dauth_b.len());
+        ptr::copy_nonoverlapping(cipher_dauth_b.as_ptr(), cipher_dauth, cipher_dauth_b.len());
         *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
     }
+    ec_close_session(&session_id);
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -379,7 +399,7 @@ fn get_config_edcsa_key() -> String {
 
 #[no_mangle]
 pub extern "C" fn ec_auth_oauth(
-    session_id: &[u8;32],
+    session_id: &[u8; 32],
     cipher_code: *const u8,
     code_size: usize,
     request_id: *const u8,
@@ -424,23 +444,20 @@ pub extern "C" fn ec_auth_oauth(
     let auth_type = AuthType::from_int(auth_type_i).unwrap();
     let oauth_result = match auth_type {
         AuthType::Google => google_oauth(&get_config_oauth().google, code),
-        /* 
+        /*
         2 => twitter_oauth(&enclave_state.config, code),
         3 => discord_oauth(&enclave_state.config, code),
         4 => telegram_oauth(&enclave_state.config, code),
         */
         AuthType::Github => github_oauth(&get_config_oauth().github, code),
-        _ => Err(GenericError::from("error type"))
+        _ => Err(GenericError::from("error type")),
     };
     if oauth_result.is_err() {
         return sgx_status_t::SGX_ERROR_INVALID_FUNCTION;
     }
     let auth_account = oauth_result.unwrap();
     info(&format!("auth account is {}", &auth_account));
-    let sealed_r = sgx_utils::i_seal(
-        auth_account.as_bytes(),
-        &get_config_seal_key()
-    );
+    let sealed_r = sgx_utils::i_seal(auth_account.as_bytes(), &get_config_seal_key());
     let sealed = match sealed_r {
         Ok(r) => r,
         Err(_) => {
@@ -448,7 +465,6 @@ pub extern "C" fn ec_auth_oauth(
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
-    let sealed_len = sealed.len();
     let raw_hashed = sgx_utils::hash(auth_account.as_bytes()).unwrap();
     let account = Account {
         auth_type: auth_type,
@@ -469,18 +485,12 @@ pub extern "C" fn ec_auth_oauth(
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     unsafe {
-        ptr::copy_nonoverlapping(
-            account_sgx.as_ptr(), 
-            account_b, 
-            account_sgx.len());
+        ptr::copy_nonoverlapping(account_sgx.as_ptr(), account_b, account_sgx.len());
         *account_b_size = account_sgx.len().try_into().unwrap();
-        ptr::copy_nonoverlapping(
-            cipher_dauth_b.as_ptr(),
-            cipher_dauth,
-            cipher_dauth_b.len());
+        ptr::copy_nonoverlapping(cipher_dauth_b.as_ptr(), cipher_dauth, cipher_dauth_b.len());
         *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
-
     }
+    ec_close_session(&session_id);
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -491,20 +501,19 @@ fn get_config_oauth() -> OAuth {
 
 #[no_mangle]
 pub extern "C" fn ec_sign_auth(
-    auth_hash: &[u8;32],
+    auth_hash: &[u8; 32],
     auth_id: i32,
     exp: u64,
-    pub_k: &mut [u8;65],
-    signature: &mut [u8;65]
+    pub_k: &mut [u8; 65],
+    signature: &mut [u8; 65],
 ) -> sgx_status_t {
-    info(&format!("sign with hash {:?} and seq {}", auth_hash, auth_id));
+    info(&format!(
+        "sign with hash {:?} and seq {}",
+        auth_hash, auth_id
+    ));
     let prv_k: sgx_ec256_private_t = get_prv_k();
     let pub_k_k1 = get_pub_k_k1();
-    let msg_sha = web3::gen_auth_bytes(
-        &pub_k_k1, 
-        auth_hash, 
-        auth_id,
-        exp);
+    let msg_sha = web3::gen_auth_bytes(&pub_k_k1, auth_hash, auth_id, exp);
     // info(format!("message is {:?}", &v);
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k.r).unwrap();
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
@@ -519,7 +528,7 @@ pub extern "C" fn ec_sign_auth(
     sgx_status_t::SGX_SUCCESS
 }
 
-fn get_pub_k_k1() -> [u8;65] {
+fn get_pub_k_k1() -> [u8; 65] {
     let enclave_state = state().inner.lock().unwrap();
     enclave_state.pub_k_k1
 }
@@ -531,15 +540,18 @@ fn get_prv_k() -> sgx_ec256_private_t {
 
 #[no_mangle]
 pub extern "C" fn ec_sign_auth_jwt(
-    session_id: &[u8;32],
-    auth_hash: &[u8;32],
+    session_id: &[u8; 32],
+    auth_hash: &[u8; 32],
     auth_id: i32,
     exp: usize,
     request_id: *const c_char,
-    token_b: &mut [u8;2048],
-    token_b_size: &mut i32
+    token_b: &mut [u8; 2048],
+    token_b_size: &mut i32,
 ) -> sgx_status_t {
-    info(&format!("sign with hash {:?} and seq {}", auth_hash, auth_id));
+    info(&format!(
+        "sign with hash {:?} and seq {}",
+        auth_hash, auth_id
+    ));
     let session_r = get_session(session_id);
     if session_r.is_none() {
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
@@ -556,17 +568,13 @@ pub extern "C" fn ec_sign_auth_jwt(
         exp: exp,
     };
     let pem_key = get_config_rsa_key();
-    let pem_key_b = pem_key.as_bytes();  
+    let pem_key_b = pem_key.as_bytes();
     let key = EncodingKey::from_rsa_pem(pem_key_b).unwrap();
-    let token = encode(
-        &Header::new(Algorithm::RS256), 
-        &my_claims, 
-        &key
-    ).unwrap();
+    let token = encode(&Header::new(Algorithm::RS256), &my_claims, &key).unwrap();
     let cipher_token = session.encrypt(token.as_bytes());
     let len = cipher_token.len();
     info(&format!("cipher_token len: {}", len));
-    let mut cipher_token_slice: [u8;2048] = [0;2048];
+    let mut cipher_token_slice: [u8; 2048] = [0; 2048];
     for i in 0..len {
         cipher_token_slice[i] = cipher_token[i];
     }
@@ -575,15 +583,15 @@ pub extern "C" fn ec_sign_auth_jwt(
     sgx_status_t::SGX_SUCCESS
 }
 
-fn get_config_rsa_key() -> String{
+fn get_config_rsa_key() -> String {
     config().inner.lock().unwrap().config.rsa_key.clone()
 }
 
 //TODO: get sign pub key automatically
 #[no_mangle]
 pub extern "C" fn ec_get_sign_pub_key(
-    pub_key: &mut[u8;2048],
-    pub_key_size: *mut u32
+    pub_key: &mut [u8; 2048],
+    pub_key_size: *mut u32,
 ) -> sgx_status_t {
     let mut enclave_state = state().inner.lock().unwrap();
     // let pub_key_slice = enclave_state.rsa_pub_key.to_public_key_pem();
@@ -591,16 +599,12 @@ pub extern "C" fn ec_get_sign_pub_key(
     sgx_status_t::SGX_SUCCESS
 }
 
-
 #[no_mangle]
-pub extern "C" fn ec_close_session(
-    session_id: &[u8;32],
-) -> sgx_status_t {
+pub extern "C" fn ec_close_session(session_id: &[u8; 32]) -> sgx_status_t {
     let mut enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.close_session(session_id);
     sgx_status_t::SGX_SUCCESS
 }
-
 
 pub fn keccak256(bytes: &[u8]) -> [u8; 32] {
     use tiny_keccak::{Hasher, Keccak};
@@ -611,7 +615,6 @@ pub fn keccak256(bytes: &[u8]) -> [u8; 32] {
     output
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     sub: String,
@@ -621,26 +624,26 @@ struct Claims {
     request_id: String,
 }
 
-fn get_session(session_id: &[u8;32]) -> Option<Session> {
+fn get_session(session_id: &[u8; 32]) -> Option<Session> {
     let mut enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.get_session(session_id)
 }
 
-fn update_session(session_id: &[u8;32], session: &Session) {
+fn update_session(session_id: &[u8; 32], session: &Session) {
     let mut enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.update_session(session_id, session);
 }
 
-fn register_session(user_key_slice: &[u8]) -> [u8;32] {
+fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
     let mut enclave_state = state().inner.lock().unwrap();
-    enclave_state.sessions.register_session(
-        user_key_slice.try_into().unwrap())
+    enclave_state
+        .sessions
+        .register_session(user_key_slice.try_into().unwrap())
 }
 
 //Testing functions
 #[no_mangle]
-pub extern "C" fn ec_test(
-) -> sgx_status_t {
+pub extern "C" fn ec_test() -> sgx_status_t {
     info("testing");
     let pem_key = br###"-----BEGIN RSA PRIVATE KEY-----
 MIIG4wIBAAKCAYEAsVOK7r90J0uJQFLlLq1XlrFhcH7xurhMY/LDWRNR9GYx6QGj
@@ -686,21 +689,17 @@ Yj4r6tKNZcgTBqeQ42YQTxW0Pdhi396GzRml7FvTCae/26MnJqAS
         issuer: "dauth".to_string(),
         audience: "demo".to_string(),
         exp: 1690233226,
-        request_id: "".to_string()
+        request_id: "".to_string(),
     };
     let key = EncodingKey::from_rsa_pem(pem_key).unwrap();
-    let token = encode(
-        &Header::new(Algorithm::RS256), 
-        &my_claims, 
-        &key
-    ).unwrap();
+    let token = encode(&Header::new(Algorithm::RS256), &my_claims, &key).unwrap();
     println!("token is {}", token);
     sgx_status_t::SGX_SUCCESS
 }
 
 #[no_mangle]
 pub extern "C" fn ec_send_seal_email(
-    session_id: &[u8;32],
+    session_id: &[u8; 32],
     seal_email: *const u8,
     email_size: usize,
 ) -> sgx_status_t {
@@ -715,9 +714,7 @@ pub extern "C" fn ec_send_seal_email(
     //let email_bytes = session.decrypt(email_slice);
     let email_bytes = sgx_utils::unseal(email_slice);
     let email = match str::from_utf8(&email_bytes) {
-        Ok(r) => {
-            r
-        },
+        Ok(r) => r,
         Err(_) => {
             error("decrypt bytes to str failed");
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
@@ -734,14 +731,13 @@ pub extern "C" fn ec_send_seal_email(
 }
 
 #[no_mangle]
-pub extern "C" fn ec_test_seal_unseal(
-) -> sgx_status_t {
+pub extern "C" fn ec_test_seal_unseal() -> sgx_status_t {
     //let plain_text = "80141b0d0e96bf36bdc20473be2f274c8a65dae10d610539a228d038257a7152e99c3b93b055c80d28590dcb48edda9c63801d0ff2c5961f5ba4cf038a4b3555d31dc4bd3a8180cb7001af4db10ed1707b284f08d1a07cd2f3fa6b5d2977117633e1c95e109e9223facf1ce7c245546971f0b6fc97eb3fad9b494d6c70b861e84878b4bef2517801507df0a30048c84ebc2".as_bytes();
 
     let plain_text = "80".as_bytes();
     info(&format!("origin text is {:?}", plain_text));
 
-    let (sealed, sealed_len)= sgx_utils::seal(&plain_text);
+    let (sealed, sealed_len) = sgx_utils::seal(&plain_text);
     let raw_sealed = &sealed[0..sealed_len.try_into().unwrap()];
     info(&format!("sealed content is {:?}", raw_sealed));
     //let sealed2: [u8;1024] = [4, 0, 2, 0, 0, 0, 0, 0, 72, 32, 243, 55, 106, 230, 178, 242, 3, 77, 59, 122, 75, 72, 167, 120, 11, 0, 0, 0, 0, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 170, 104, 90, 10, 215, 117, 210, 222, 215, 179, 19, 175, 198, 117, 135, 93, 120, 206, 179, 187, 199, 61, 114, 235, 213, 52, 233, 80, 195, 147, 171, 105, 0, 0, 0, 240, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 35, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 173, 105, 41, 87, 138, 236, 184, 166, 220, 249, 66, 139, 214, 56, 173, 251, 78, 108, 143, 44, 33, 138, 91, 23, 155, 220, 94, 31, 130, 12, 83, 172, 27, 153, 219, 250, 32, 89, 120, 58, 33, 114, 70, 81, 59, 137, 119, 122, 33, 70, 150, 139, 247, 17, 21, 56, 40, 125, 234, 217, 198, 193, 60, 158, 12, 104, 57, 112, 171, 18, 237, 69, 222, 122, 242, 0, 211, 36, 64, 22, 28, 63, 151, 181, 160, 222, 245, 76, 61, 103, 177, 141, 200, 246, 194, 163, 184, 234, 28, 144, 184, 97, 147, 68, 176, 33, 128, 36, 17, 107, 196, 210, 240, 50, 179, 173, 221, 216, 232, 246, 255, 228, 179, 7, 29, 118, 108, 202, 230, 165, 203, 185, 194, 67, 1, 8, 210, 117, 251, 217, 83, 242, 93, 76, 91, 35, 228, 239, 93, 166, 181, 81, 172, 30, 138, 60, 162, 230, 59, 143, 211, 24, 249, 42, 247, 4, 149, 105, 11, 244, 129, 61, 31, 162, 174, 125, 102, 255, 7, 7, 139, 125, 63, 134, 183, 88, 208, 24, 0, 244, 237, 63, 161, 189, 170, 99, 218, 31, 178, 113, 45, 65, 190, 11, 170, 195, 55, 203, 90, 99, 64, 18, 138, 74, 50, 235, 42, 62, 248, 197, 81, 131, 216, 96, 167, 193, 103, 166, 10, 231, 152, 195, 2, 124, 29, 169, 111, 236, 49, 250, 99, 165, 161, 215, 69, 223, 93, 60, 86, 104, 41, 176, 195, 204, 237, 73, 139, 109, 221, 89, 208, 8, 246, 74, 201, 88, 63, 16, 236, 111, 59, 140, 121, 55, 171, 1, 226, 78, 236, 217, 176, 158, 83, 22, 138, 136, 213, 241, 88, 114, 19, 159, 135, 115, 106, 255, 32, 34, 56, 113, 112, 13, 179, 169, 165, 150, 155, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
@@ -749,22 +745,21 @@ pub extern "C" fn ec_test_seal_unseal(
     let unsealed_txt = std::str::from_utf8(&unsealed);
     // let unsealed_txt = os_utils::encode_hex(&unsealed);
     // info(format!("{}", unsealed_txt);
-    
+
     match unsealed_txt {
         Ok(r) => info(&format!("unsealed txt is {:?}", r)),
-        Err(err) => info("unseal failed")
+        Err(err) => info("unseal failed"),
     }
     sgx_status_t::SGX_SUCCESS
 }
 
-
 // when email format incorrect, return [0_u8;32]
 #[no_mangle]
 pub extern "C" fn ec_calc_email_hash(
-    session_id: &[u8;32],
+    session_id: &[u8; 32],
     cipher_email: *const u8,
     cipher_email_size: usize,
-    email_hash: &mut[u8;32]
+    email_hash: &mut [u8; 32],
 ) -> sgx_status_t {
     let email_slice = unsafe { slice::from_raw_parts(cipher_email, cipher_email_size as usize) };
     let mut enclave_state = state().inner.lock().unwrap();
@@ -780,10 +775,7 @@ pub extern "C" fn ec_calc_email_hash(
         Ok(r) => {
             *email_hash = r;
             sgx_status_t::SGX_SUCCESS
-        },
-        Err(err) => {
-            sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE
         }
+        Err(err) => sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE,
     }
 }
-

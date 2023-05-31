@@ -24,19 +24,23 @@ enclave {
             [in, size=32]uint8_t* session_id
         );
 
-        public sgx_status_t ec_calc_email_hash(
-            [in, size=32]uint8_t* session_id,
-            [in, size=cipher_email_size]uint8_t* cipher_email,
-            int cipher_email_size,
-            [out, size=32]uint8_t* email_hash
+        public sgx_status_t ec_send_otp(
+            [in, size=otp_req_size]uint8_t* otp_req,
+            int otp_req_size,
+            [out] uint8_t* error_code            
         );
 
-        public sgx_status_t ec_send_otp(
-            int auth_type,
-            [in, size=32]uint8_t* session_id,
-            [in, size=mail_size]uint8_t* cipher_email,
-            int mail_size
+        public sgx_status_t ec_auth_in_one(
+            [in, size=auth_req_size]uint8_t* auth_req,
+            int auth_req_size,
+            int max_len,
+            [out, size=max_len]uint8_t* account_b,
+            [out] uint32_t* account_b_size,
+            [out, size=max_len]uint8_t* cipher_dauth,
+            [out] uint32_t* cipher_dauth_size,
+            [out] uint8_t* error_code
         );
+
 
         public sgx_status_t ec_send_seal_email(
             [in, size=32]uint8_t* session_id,
@@ -44,50 +48,6 @@ enclave {
             int mail_size
         );
 
-        public sgx_status_t ec_confirm_otp(
-            [in, size=32]uint8_t* session_id,
-            [in, size=code_size]uint8_t* cipher_code,
-            int code_size,
-            [in, size=request_id_size]uint8_t* request_id,
-            int request_id_size,
-            [out, size=max_len]uint8_t* account_b,
-            int max_len,
-            [out] uint32_t* account_b_size,
-            [out, size=max_len]uint8_t* cipher_dauth,
-            [out] uint32_t* cipher_dauth_size
-        );
-
-        public sgx_status_t ec_auth_oauth(
-            [in, size=32]uint8_t* session_id,
-            [in, size=code_size]uint8_t* cipher_code,
-            int code_size,
-            [in, size=request_id_size]uint8_t* request_id,
-            int request_id_size,
-            int auth_type,
-            [out, size=max_len]uint8_t* account_b,
-            int max_len,
-            [out] uint32_t* account_b_size,
-            [out, size=max_len]uint8_t* cipher_dauth,
-            [out] uint32_t* cipher_dauth_size
-        );
-
-        public sgx_status_t ec_sign_auth(
-            [in, size=32]uint8_t* a_hash,
-            int a_seq,
-            uint64_t auth_exp,
-            [out, size=65]uint8_t* pub_k,
-            [out, size=65]uint8_t* signature
-        );
-        
-        public sgx_status_t ec_sign_auth_jwt(
-            [in, size=32]uint8_t* session_id,
-            [in, size=32]uint8_t* a_hash,
-            int a_seq,
-            uint64_t auth_exp,
-            [in, string]char* request_id,
-            [out, size=2048]uint8_t* token,
-            [out] uint32_t* token_size
-        );
 
         public sgx_status_t ec_get_sign_pub_key(
             [out, size=2048]uint8_t* pub_key,

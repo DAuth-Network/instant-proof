@@ -1,13 +1,51 @@
-extern crate  serde;
-use serde::{Deserialize, Serialize};
-use std::string::*;
-use std::fmt::*;
-use std::vec::*;
+extern crate serde;
 use super::os_utils::*;
+use serde::{Deserialize, Serialize};
+use std::fmt::*;
+use std::string::*;
+use std::vec::*;
 
 pub trait ToJsonBytes {
-    fn to_json_bytes(&self) -> Vec<u8> where Self: Serialize {   
+    fn to_json_bytes(&self) -> Vec<u8>
+    where
+        Self: Serialize,
+    {
         serde_json::to_vec(&self).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtpIn {
+    pub session_id: String,
+    pub cipher_account: String,
+    pub auth_type: AuthType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AuthIn {
+    pub session_id: String,
+    pub request_id: String, // default None
+    pub cipher_code: String,
+    pub client: String,
+    pub iat: u64,
+    pub auth_type: String, // default None, when None, compare with otp otherwise, call oauth
+    pub sign_mode: SignMode, // default Proof
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SignMode {
+    JWT = 0,
+    PROOF = 1,
+}
+
+impl SignMode {
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "jwt" => Some(Self::JWT),
+            "proof" => Some(Self::PROOF),
+            _ => None,
+        }
     }
 }
 
@@ -15,7 +53,7 @@ pub trait ToJsonBytes {
 pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
-    pub auth_type: AuthType
+    pub auth_type: AuthType,
 }
 
 impl ToJsonBytes for Account {}
@@ -32,18 +70,23 @@ impl DAuth {
         Self {
             account: account.acc_hash.to_string(),
             auth_type: account.auth_type,
-            request_id: req_id
+            request_id: req_id,
         }
     }
     pub fn to_string(&self) -> String {
-        format!("{}:{}:{}", self.auth_type.to_string(), self.account, self.request_id)
+        format!(
+            "{}:{}:{}",
+            self.auth_type.to_string(),
+            self.account,
+            self.request_id
+        )
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DAuthEthSigned {
     pub auth: DAuth,
-    pub signature: String
+    pub signature: String,
 }
 
 impl ToJsonBytes for DAuthEthSigned {}
@@ -51,14 +94,14 @@ impl DAuthEthSigned {
     pub fn new(dauth: DAuth, signed: &[u8]) -> Self {
         Self {
             auth: dauth,
-            signature: encode_hex(&signed)
+            signature: encode_hex(&signed),
         }
     }
 }
 
 pub struct InnerAccount {
     pub account: String,
-    pub auth_type: AuthType
+    pub auth_type: AuthType,
 }
 
 impl InnerAccount {
@@ -71,13 +114,13 @@ impl InnerAccount {
                 let a_t = AuthType::from_str(a);
                 if a_t.is_none() {
                     None
-                } else {                
+                } else {
                     Some(Self {
                         account: b.to_string(),
                         auth_type: a_t.unwrap(),
                     })
                 }
-            },
+            }
             _ => None,
         }
     }
@@ -96,14 +139,14 @@ pub enum AuthType {
 }
 
 impl AuthType {
-    pub const ALL: [Self;7] = [
+    pub const ALL: [Self; 7] = [
         Self::Email,
         Self::Sms,
         Self::Discord,
         Self::Google,
         Self::Github,
         Self::Telegram,
-        Self::Twitter
+        Self::Twitter,
     ];
 
     pub fn from_str(s: &str) -> Option<Self> {
@@ -115,10 +158,10 @@ impl AuthType {
             "discord" => Some(Self::Discord),
             "telegram" => Some(Self::Telegram),
             "github" => Some(Self::Github),
-            _ => None
+            _ => None,
         }
     }
-    
+
     pub fn from_int(i: i32) -> Option<Self> {
         match i {
             0 => Some(Self::Email),
@@ -128,12 +171,10 @@ impl AuthType {
             7 => Some(Self::Discord),
             8 => Some(Self::Telegram),
             9 => Some(Self::Github),
-            _ => None
+            _ => None,
         }
     }
-
 }
-
 
 impl Display for AuthType {
     fn fmt(&self, f: &mut Formatter) -> Result {
