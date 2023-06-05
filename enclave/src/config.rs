@@ -44,8 +44,8 @@ pub struct TeeConfig {
     pub jwt_issuer: String,
 }
 
-impl TeeConfig {
-    pub fn default() -> Self {
+impl std::default::Default for TeeConfig {
+    fn default() -> Self {
         Self {
             email: Email::default(),
             sms: Sms::default(),
@@ -144,9 +144,11 @@ fn test_tee_config_creation() {
             github: OAuthClient::default(),
             google: OAuthClient::default(),
         },
-        rsa_key: "".to_string(),
+        rsa_key: emp(),
         ecdsa_key: emp(),
-        seal_key: "".to_string(),
+        seal_key: emp(),
+        proof_issuer: emp(),
+        jwt_issuer: emp(),
     };
     assert_eq!(tee_config.email.account, "");
     assert_eq!(tee_config.oauth.github.client_id, "");

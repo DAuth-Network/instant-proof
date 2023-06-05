@@ -172,6 +172,7 @@ pub extern "C" fn ec_set_conf(config_b: *const u8, config_b_size: usize) -> sgx_
     let new_config = serde_json::from_slice(config_slice).unwrap();
     info(&format!("sgx config {:?}", &new_config));
     config().inner.lock().unwrap().config = new_config;
+    info("set config success");
     sgx_status_t::SGX_SUCCESS
 }
 
