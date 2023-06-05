@@ -1,7 +1,7 @@
-extern crate  serde;
+extern crate serde;
 use serde::{Deserialize, Serialize};
-use std::string::*;
 use std::fmt::*;
+use std::string::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Email {
@@ -19,8 +19,6 @@ pub struct Sms {
     pub server: String,
 }
 
-
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuthClient {
     pub client_id: String,
@@ -34,7 +32,6 @@ pub struct OAuth {
     pub google: OAuthClient,
 }
 
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
     pub email: Email,
@@ -42,21 +39,25 @@ pub struct TeeConfig {
     pub sms: Sms,
     pub rsa_key: String,
     pub ecdsa_key: String,
-    pub seal_key: String
+    pub seal_key: String,
+    pub proof_issuer: String,
+    pub jwt_issuer: String,
 }
-
 
 impl TeeConfig {
     pub fn default() -> Self {
         Self {
             email: Email::default(),
             sms: Sms::default(),
-            oauth: OAuth { 
-                github: OAuthClient::default(), 
-                google: OAuthClient::default() },
+            oauth: OAuth {
+                github: OAuthClient::default(),
+                google: OAuthClient::default(),
+            },
             rsa_key: emp(),
             ecdsa_key: emp(),
             seal_key: emp(),
+            proof_issuer: emp(),
+            jwt_issuer: emp(),
         }
     }
 }
@@ -92,7 +93,6 @@ impl Sms {
         }
     }
 }
-
 
 fn emp() -> String {
     "".to_string()
@@ -142,7 +142,7 @@ fn test_tee_config_creation() {
         sms: Sms::default(),
         oauth: OAuth {
             github: OAuthClient::default(),
-            google: OAuthClient::default(),    
+            google: OAuthClient::default(),
         },
         rsa_key: "".to_string(),
         ecdsa_key: emp(),
@@ -153,4 +153,3 @@ fn test_tee_config_creation() {
     assert_eq!(tee_config.rsa_key, "");
     assert_eq!(tee_config.seal_key, "");
 }
-

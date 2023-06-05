@@ -55,7 +55,7 @@ impl fmt::Debug for Session {
 }
 
 pub struct Sessions {
-    pub state: HashMap<[u8; 32], Session>,
+    pub state: HashMap<String, Session>,
     pub prv_k: sgx_ec256_private_t,
 }
 
@@ -84,25 +84,26 @@ impl Sessions {
             return [0; 32];
         }
         let sha = sha_result.unwrap();
-        let session = Session::new(sha, shr_k_reverse[16..].try_into().unwrap());
-        self.state.insert(sha, session);
+        let sha_str = os_utils::encode_hex(&sha);
+        let session = Session::new(sha_str.clone(), shr_k_reverse[16..].try_into().unwrap());
+        self.state.insert(sha_str, session);
         return sha;
     }
 
-    pub fn close_session(&mut self, session_id: &String) {
+    pub fn close_session(&mut self, session_id: &str) {
         if let Some(v) = self.state.get(session_id) {
             self.state.remove(session_id);
         }
     }
 
-    pub fn get_session(&self, session_id: &String) -> Option<Session> {
+    pub fn get_session(&self, session_id: &str) -> Option<Session> {
         match self.state.get(session_id) {
             None => None,
             Some(s) => Some(s.to_owned()),
         }
     }
 
-    pub fn update_session(&mut self, k: &String, v: &Session) {
-        self.state.insert(k.clone(), v.clone());
+    pub fn update_session(&mut self, k: &str, v: &Session) {
+        self.state.insert(k.to_string(), v.clone());
     }
 }

@@ -42,13 +42,6 @@ enclave {
         );
 
 
-        public sgx_status_t ec_send_seal_email(
-            [in, size=32]uint8_t* session_id,
-            [in, size=mail_size]uint8_t* seal_email,
-            int mail_size
-        );
-
-
         public sgx_status_t ec_get_sign_pub_key(
             [out, size=2048]uint8_t* pub_key,
             [out] uint32_t* pub_key_size

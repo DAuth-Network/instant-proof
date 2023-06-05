@@ -38,6 +38,7 @@ impl Error {
             ErrorKind::DataError => 6,
             ErrorKind::SgxError => 7,
             ErrorKind::DbError => 8,
+            ErrorKind::OtpCodeError => 9,
         }
     }
 }
@@ -53,6 +54,7 @@ pub enum ErrorKind {
     DataError = 6,
     SgxError = 7,
     DbError = 8,
+    OtpCodeError = 9,
 }
 
 impl ErrorKind {
@@ -67,6 +69,7 @@ impl ErrorKind {
             6 => Some(ErrorKind::DataError),
             7 => Some(ErrorKind::SgxError),
             8 => Some(ErrorKind::DbError),
+            9 => Some(ErrorKind::OtpCodeError),
             _ => None,
         }
     }
@@ -84,6 +87,7 @@ impl fmt::Display for Error {
             ErrorKind::DataError => write!(f, "data error, please check your parameter"),
             ErrorKind::SgxError => write!(f, "sgx failed"),
             ErrorKind::DbError => write!(f, "insert or query db failed"),
+            ErrorKind::OtpCodeError => write!(f, "otp code mismatch"),
         }
     }
 }
