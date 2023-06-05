@@ -83,7 +83,7 @@ fn init_enclave_and_set_conf(conf: config::TeeConfig) -> SgxEnclave {
             config_b.as_ptr() as *const u8,
             config_b_size,
         );
-        ecall::ec_test(enclave.geteid(), &mut sgx_result)
+        //ecall::ec_test(enclave.geteid(), &mut sgx_result)
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {
