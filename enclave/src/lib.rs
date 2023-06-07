@@ -238,6 +238,9 @@ pub extern "C" fn ec_send_otp(
         }
         return sgx_status_t::SGX_SUCCESS;
     }
+    unsafe {
+        *error_code = 255;
+    }
     sgx_status_t::SGX_SUCCESS
 }
 
@@ -377,13 +380,16 @@ pub extern "C" fn ec_auth_in_one(
         }
     };
     let raw_hashed = sgx_utils::hash(account.account.as_bytes()).unwrap();
+    let account_hash = os_utils::encode_hex(&raw_hashed);
     info(&format!("account seal {:?}", sealed));
     info(&format!("account hash {:?}", raw_hashed));
     let out_account = Account {
         auth_type: account.auth_type,
         acc_seal: os_utils::encode_hex(&sealed),
-        acc_hash: os_utils::encode_hex(&raw_hashed),
+        acc_hash: account_hash.clone(),
     };
+    // update account to account_hash
+    account.account = account_hash;
     // sign the auth
     let auth = InnerAuth {
         account: &account,
@@ -392,17 +398,19 @@ pub extern "C" fn ec_auth_in_one(
     let mut dauth_signed = vec![];
     match req.sign_mode {
         SignMode::JWT => {
+            info("signing jwt");
             let claim = auth.to_jwt_claim(&get_issuer());
             let pem_key = get_config_rsa_key();
             let pem_key_b = pem_key.as_bytes();
             let key = EncodingKey::from_rsa_pem(pem_key_b).unwrap();
             let token = encode(&Header::new(Algorithm::RS256), &claim, &key).unwrap();
-            let dauth_signed = token.as_bytes();
+            dauth_signed = token.as_bytes().to_vec();
         }
         SignMode::PROOF => {
+            info("signing proof");
             let eth_string = auth.to_eth_string();
             let signature_b = web3::eth_sign(&eth_string, get_config_edcsa_key());
-            let dauth_signed = EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes();
+            dauth_signed = EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes();
         }
         _ => {
             error("invalid sign mode");
@@ -432,6 +440,9 @@ pub extern "C" fn ec_auth_in_one(
         *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
     }
     ec_close_session(&req.session_id);
+    unsafe {
+        *error_code = 255;
+    }
     sgx_status_t::SGX_SUCCESS
 }
 

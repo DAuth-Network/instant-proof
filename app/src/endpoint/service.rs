@@ -127,7 +127,10 @@ pub async fn exchange_key(
     }
     let exk_in = ExchangeKeyIn { key: &req.key };
     match tee.exchange_key(exk_in) {
-        Ok(r) => json_resp(r),
+        Ok(r) => {
+            sessions.register_session(&r.session_id);
+            json_resp(r)
+        }
         Err(e) => fail_resp(e),
     }
 }

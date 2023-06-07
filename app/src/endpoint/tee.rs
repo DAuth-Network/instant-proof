@@ -144,7 +144,7 @@ impl TeeAuth for TeeService {
             error!("encode client error, {}", err);
             Error::new(ErrorKind::DataError)
         })?;
-        const max_len: usize = 512;
+        const max_len: usize = 2048;
         let mut account_b = [0_u8; max_len];
         let mut account_b_size = 0;
         let mut cipher_dauth = [0_u8; max_len];
@@ -185,7 +185,7 @@ impl TeeAuth for TeeService {
     }
 
     fn close_session(&self, session_id: &str) -> Result<(), Error> {
-        let session_id_b: [u8; 32] = hex::decode(&session_id[2..]).unwrap().try_into().unwrap();
+        let session_id_b: [u8; 32] = hex::decode(&session_id).unwrap().try_into().unwrap();
         let mut sgx_result = sgx_status_t::SGX_SUCCESS;
         let result = self.pool.install(|| unsafe {
             ecall::ec_close_session(self.enclave.geteid(), &mut sgx_result, &session_id_b)
