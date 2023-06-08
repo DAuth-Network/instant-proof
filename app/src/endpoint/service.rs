@@ -39,7 +39,7 @@ pub struct FailResp {
 #[serde(rename_all = "lowercase")]
 enum Status {
     FAIL,
-    SUCC,
+    SUCCESS,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
