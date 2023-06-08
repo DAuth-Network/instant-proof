@@ -58,14 +58,14 @@ fn fail_resp(err: derr::Error) -> HttpResponse {
 
 fn succ_resp() -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCC,
+        status: Status::SUCCESS,
         data: "".to_string(),
     })
 }
 
 fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCC,
+        status: Status::SUCCESS,
         data: resp,
     })
 }
