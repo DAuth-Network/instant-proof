@@ -6,7 +6,14 @@ env = "dev"
 host = "127.0.0.1"
 workers = 16
 
-[email]
+
+[otpchannel.email]
+account = "verify@keysafe.network"
+password = ""
+server = ""
+sender = ""
+
+[otpchannel.sms]
 account = "verify@keysafe.network"
 password = ""
 server = ""

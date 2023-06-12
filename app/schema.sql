@@ -40,6 +40,7 @@ create table client (
     client_origin varchar(128), 
     client_id varchar(32),
     client_secret_hash varchar(128),
+    client_redirect_url varchar(256),
     PRIMARY KEY(client_name)
 )
 ROW_FORMAT=COMPRESSED

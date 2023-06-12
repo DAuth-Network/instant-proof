@@ -1,3 +1,8 @@
+use super::config::OAuthConf;
+use super::err::*;
+use super::log::*;
+use crate::model::AuthType;
+use crate::*;
 use http_req::{
     request::{post, Method, RequestBuilder},
     tls,
@@ -10,14 +15,62 @@ use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
 
-use super::config::OAuthClient;
-use super::err::*;
-use super::log::*;
+pub fn get_oauth_client(auth_type: AuthType) -> Option<&'static dyn OAuthClient> {
+    let conf = &config(None).inner;
+    match auth_type {
+        AuthType::Google => Some(&conf.google),
+        AuthType::Github => Some(&conf.github),
+        AuthType::Apple => Some(&conf.apple),
+        _ => {
+            error("invalid auth type");
+            None
+        }
+    }
+}
 
-pub fn google_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String> {
+pub struct GoogleOAuthClient {
+    pub conf: OAuthConf,
+}
+
+pub struct GithubOAuthClient {
+    pub conf: OAuthConf,
+}
+
+pub struct AppleOAuthClient {
+    pub conf: OAuthConf,
+}
+
+impl OAuthClient for GoogleOAuthClient {
+    fn new(conf: OAuthConf) -> Self {
+        Self { conf }
+    }
+    fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+        google_oauth(&self.conf, code, redirect_url)
+    }
+}
+
+impl OAuthClient for GithubOAuthClient {
+    fn new(conf: OAuthConf) -> Self {
+        Self { conf }
+    }
+    fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+        github_oauth(&self.conf, code, redirect_url)
+    }
+}
+
+impl OAuthClient for AppleOAuthClient {
+    fn new(conf: OAuthConf) -> Self {
+        Self { conf }
+    }
+    fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+        apple_oauth(&self.conf, code, redirect_url)
+    }
+}
+
+fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let token_req = format!(
         "code={}&client_id={}&client_secret={}&grant_type={}&redirect_uri={}",
-        code, conf.client_id, conf.client_secret, "authorization_code", conf.redirect_url
+        code, conf.client_id, conf.client_secret, "authorization_code", redirect_url
     );
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
@@ -43,7 +96,69 @@ pub fn google_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String> {
     if v2["email"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
-    Ok(v2["email"].clone().to_string())
+    Ok(InnerAccount {
+        account: v2["email"].clone().to_string(),
+        auth_type: AuthType::Google,
+    })
+}
+
+fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+    let token_req = format!(
+        "code={}&client_id={}&client_secret={}&grant_type={}",
+        code, conf.client_id, conf.client_secret, "authorization_code"
+    );
+    let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
+    let token_resp = http_req(
+        "https://appleid.apple.com/auth/token",
+        Method::POST,
+        Some(token_req),
+        token_headers,
+    );
+    let v: Value = serde_json::from_str(&token_resp?)?;
+    if v["id_token"].is_null() {
+        return Err(GenericError::from("github oauth failed"));
+    }
+    let token = v["id_token"].clone().to_string();
+    info(&format!("apple id_token {}", token));
+    match extract_apple_token(&token, "") {
+        Some(r) => Ok(InnerAccount {
+            account: r.email,
+            auth_type: AuthType::Apple,
+        }),
+        None => Err(GenericError::from("google oauth failed")),
+    }
+}
+
+pub fn extract_apple_token(token: &str, pub_key: &str) -> Option<AppleIdToken> {
+    let mut validation = Validation::new(Algorithm::RS256);
+    let token_data = decode::<AppleIdToken>(
+        &token,
+        &DecodingKey::from_secret(pub_key.as_ref()),
+        &validation,
+    );
+    match token_data {
+        Ok(t) => Some(t.claims),
+        _ => {
+            info("apple id_token decode failed");
+            None
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppleIdToken {
+    pub iss: String,
+    pub sub: String,
+    pub aud: String,
+    pub iat: u64,
+    pub exp: u64,
+    pub nonce: String,
+    pub nonce_supported: bool,
+    pub email: String,
+    pub email_verified: bool,
+    pub is_private_email: bool,
+    pub real_user_status: u64,
+    pub transfer_sub: String,
 }
 
 /*
@@ -62,7 +177,7 @@ pub fn telegram_oauth(conf: &Config, code: &str) -> GenericResult<String>{
 }
 */
 
-pub fn github_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String> {
+fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let token_req = format!(
         "client_id={}&client_secret={}&code={}",
         conf.client_id, conf.client_secret, code
@@ -96,7 +211,10 @@ pub fn github_oauth(conf: &OAuthClient, code: &str) -> GenericResult<String> {
     if v2["id"].is_null() {
         return Err(GenericError::from("github oauth failed"));
     }
-    Ok(v2["id"].clone().to_string())
+    Ok(InnerAccount {
+        account: v2["login"].clone().to_string(),
+        auth_type: AuthType::Github,
+    })
 }
 
 pub fn http_req(

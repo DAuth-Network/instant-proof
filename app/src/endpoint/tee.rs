@@ -61,7 +61,7 @@ pub struct AuthIn<'a> {
     pub cipher_code: &'a str,
     pub client: &'a Client,
     pub iat: u64,
-    pub auth_type: &'a str, // default None, when None, compare with otp otherwise, call oauth
+    pub auth_type: AuthType, // when sms/email, compare code; when google, github, apple, call oauth
     pub sign_mode: SignMode, // default Proof
 }
 

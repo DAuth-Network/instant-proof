@@ -2,7 +2,6 @@
 #![crate_type = "staticlib"]
 #![cfg_attr(not(target_env = "sgx"), no_std)]
 #![cfg_attr(target_env = "sgx", feature(rustc_private))]
-
 extern crate jsonwebtoken;
 extern crate libsecp256k1;
 extern crate sgx_tcrypto;
@@ -10,7 +9,6 @@ extern crate sgx_trts;
 extern crate sgx_tseal;
 extern crate sgx_types;
 extern crate tiny_keccak;
-
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
 extern crate sgx_tstd as std;
@@ -18,47 +16,37 @@ extern crate http_req;
 extern crate serde;
 extern crate serde_json;
 extern crate sgx_rand;
-
 #[macro_use]
 extern crate serde_cbor;
-
 #[cfg(target_env = "sgx")]
 extern crate sgx_tseal;
-
 use config::*;
 use jsonwebtoken::crypto::sign;
 use os_utils::{decode_hex, encode_hex};
 use serde::{Deserialize, Serialize};
 use sgx_tcrypto::*;
-use sgx_trts::enclave;
 use sgx_types::*;
 use std::convert::TryInto;
-
-use std::mem::MaybeUninit;
-use std::slice;
-use std::sync::{Once, SgxMutex};
-
 use std::ffi::CStr;
+use std::mem::MaybeUninit;
 use std::os::raw::c_char;
-
+use std::slice;
 use std::string::{String, ToString};
+use std::sync::{Once, SgxMutex};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
 use std::ptr;
 use std::str;
-use std::vec::Vec;
-
 pub mod config;
 pub mod err;
 pub mod log;
 pub mod model;
 pub mod oauth;
 pub mod os_utils;
+pub mod otp;
 pub mod session;
 pub mod sgx_utils;
-pub mod sms;
 pub mod web3;
-
 use self::err::*;
 use self::log::*;
 use self::model::*;
@@ -77,6 +65,11 @@ struct EnclaveState {
 // EnclaveConfig includes config set once and never changes
 struct EnclaveConfig {
     pub config: TeeConfig,
+    pub mail: otp::MailChannelClient,
+    pub sms: otp::SmsChannelClient,
+    pub google: oauth::GoogleOAuthClient,
+    pub github: oauth::GithubOAuthClient,
+    pub apple: oauth::AppleOAuthClient,
 }
 
 // Rust doesn't support mutable statics, as it could lead to bugs in a multithreading setting
@@ -86,7 +79,7 @@ struct StateReader {
 }
 
 struct ConfigReader {
-    inner: SgxMutex<EnclaveConfig>,
+    inner: EnclaveConfig,
 }
 
 fn state() -> &'static StateReader {
@@ -119,16 +112,22 @@ fn state() -> &'static StateReader {
     }
 }
 
-fn config() -> &'static ConfigReader {
+fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
     // Create an uninitialized static
     static mut SINGLETON: MaybeUninit<ConfigReader> = MaybeUninit::uninit();
     static ONCE: Once = Once::new();
     unsafe {
         ONCE.call_once(|| {
+            let tee_conf = tee_config.unwrap();
             let singleton = ConfigReader {
-                inner: SgxMutex::new(EnclaveConfig {
-                    config: TeeConfig::default(),
-                }),
+                inner: EnclaveConfig {
+                    config: tee_conf.clone(),
+                    mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
+                    sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
+                    github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
+                    google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
+                    apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple.clone()),
+                },
             };
             // Store it to the static var, i.e. initialize it
             SINGLETON.write(singleton);
@@ -171,7 +170,7 @@ pub extern "C" fn ec_set_conf(config_b: *const u8, config_b_size: usize) -> sgx_
     let config_slice = unsafe { slice::from_raw_parts(config_b, config_b_size) };
     let new_config = serde_json::from_slice(config_slice).unwrap();
     info(&format!("sgx config {:?}", &new_config));
-    config().inner.lock().unwrap().config = new_config;
+    config(new_config);
     info("set config success");
     sgx_status_t::SGX_SUCCESS
 }
@@ -181,6 +180,13 @@ pub extern "C" fn ec_set_conf(config_b: *const u8, config_b_size: usize) -> sgx_
  1, generate a random 6 digits, bind with user session
  2, send the digits to user email
 */
+pub trait OtpChannelClient {
+    fn new(conf: config::OtpChannelConf) -> Self
+    where
+        Self: Sized;
+    fn send_otp(&self, to_account: &str, c_code: &str) -> GenericResult<()>;
+}
+
 #[no_mangle]
 pub extern "C" fn ec_send_otp(
     otp_req: *const u8,
@@ -213,45 +219,36 @@ pub extern "C" fn ec_send_otp(
     info(&format!("otp account is {}", account));
     let otp = sgx_utils::rand();
     //TODO: sendmail error
-    session.code = otp.to_string();
-    let inner_account = InnerAccount {
-        account: account.to_string(),
-        auth_type: req.auth_type,
-    };
-    session.data = inner_account.to_str();
-    update_session(&req.session_id, &session);
-    let send_r = match req.auth_type {
-        AuthType::Email => os_utils::sendmail(&get_config_email(), &account, &otp.to_string()),
-        AuthType::Sms => sms::sendsms(&get_config_sms(), &account, &otp.to_string()),
-        _ => {
-            error("invalid auth type");
-            unsafe {
-                *error_code = Error::new(ErrorKind::DataError).to_int();
-            }
-            return sgx_status_t::SGX_SUCCESS;
+    // get otp_client and send mail
+    let otp_client_o = otp::get_otp_client(req.auth_type);
+    if otp_client_o.is_none() {
+        unsafe {
+            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
         }
-    };
-    if send_r.is_err() {
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    // send otp
+    let otp_client = otp_client_o.unwrap();
+    let otp_r = otp_client.send_otp(&account, &otp.to_string());
+    if otp_r.is_err() {
         error("send otp failed");
         unsafe {
             *error_code = Error::new(ErrorKind::SendChannelError).to_int();
         }
         return sgx_status_t::SGX_SUCCESS;
     }
+    // update session
+    session.code = otp.to_string();
+    let inner_account = InnerAccount {
+        account: account.to_string(),
+        auth_type: req.auth_type,
+    };
+    session.data = inner_account;
+    update_session(&req.session_id, &session);
     unsafe {
         *error_code = 255;
     }
     sgx_status_t::SGX_SUCCESS
-}
-
-fn get_config_email() -> Email {
-    let conf = config().inner.lock().unwrap();
-    conf.config.email.clone()
-}
-
-fn get_config_sms() -> Sms {
-    let conf = config().inner.lock().unwrap();
-    conf.config.sms.clone()
 }
 
 fn decrypt_text_to_text(cipher_text: &str, session: &Session) -> Result<String, Error> {
@@ -274,6 +271,13 @@ fn decrypt_text_to_text(cipher_text: &str, session: &Session) -> Result<String, 
             Err(Error::new(ErrorKind::DataError))
         }
     }
+}
+
+pub trait OAuthClient {
+    fn new(conf: config::OAuthConf) -> Self
+    where
+        Self: Sized;
+    fn oauth(&self, c_code: &str, redirect_url: &str) -> GenericResult<InnerAccount>;
 }
 
 #[no_mangle]
@@ -319,56 +323,41 @@ pub extern "C" fn ec_auth_in_one(
     }
     let code = code_r.unwrap();
     info(&format!("auth code is {}", &code));
-    let mut account: InnerAccount = InnerAccount {
-        account: "".to_string(),
-        auth_type: AuthType::Email,
-    };
-    match req.auth_type.as_str() {
-        "None" => {
-            // compare otp
+    // get account from author
+    let result: Result<InnerAccount, Error> = match req.auth_type {
+        AuthType::Email | AuthType::Sms => {
+            // when auth_type None, compare otp code, if match, return account in session
             if !code.eq(&session.code) {
                 info("confirm code not match, returning");
-                unsafe {
-                    *error_code = Error::new(ErrorKind::OtpCodeError).to_int();
-                }
-                return sgx_status_t::SGX_SUCCESS;
+                Err(Error::new(ErrorKind::OtpCodeError))
+            } else {
+                Ok(session.data.clone())
             }
-            account = InnerAccount::from_str(&session.data).unwrap();
         }
         _ => {
-            // oauth
-            let auth_type = AuthType::from_str(&req.auth_type);
-            if auth_type.is_none() {
-                error("invalid auth type");
-                unsafe {
-                    *error_code = Error::new(ErrorKind::DataError).to_int();
+            // when auth_type not none, call oauth, return oauth account or error
+            let oauth_client_o = oauth::get_oauth_client(req.auth_type);
+            if oauth_client_o.is_none() {
+                Err(Error::new(ErrorKind::DataError))
+            } else {
+                let oauth_client = oauth_client_o.unwrap();
+                let oauth_r = oauth_client.oauth(&code, &req.client.client_redirect_url);
+                if oauth_r.is_err() {
+                    Err(Error::new(ErrorKind::OAuthCodeError))
+                } else {
+                    Ok(oauth_r.unwrap())
                 }
-                return sgx_status_t::SGX_SUCCESS;
             }
-            let auth_type = auth_type.unwrap();
-            account.auth_type = auth_type;
-            let oauth_result = match auth_type {
-                AuthType::Google => google_oauth(&get_config_oauth().google, &code),
-                AuthType::Github => github_oauth(&get_config_oauth().github, &code),
-                _ => {
-                    error("invalid auth type");
-                    unsafe {
-                        *error_code = Error::new(ErrorKind::DataError).to_int();
-                    }
-                    return sgx_status_t::SGX_SUCCESS;
-                }
-            };
-            if oauth_result.is_err() {
-                error("oauth failed");
-                unsafe {
-                    *error_code = Error::new(ErrorKind::OAuthCodeError).to_int();
-                }
-                return sgx_status_t::SGX_SUCCESS;
-            }
-            let oauth_result = oauth_result.unwrap();
-            account.account = oauth_result;
         }
+    };
+    if result.is_err() {
+        error("auth failed");
+        unsafe {
+            *error_code = result.err().unwrap().to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
     }
+    let mut account = result.unwrap();
     // when success, seal the account
     info(&format!("account is {:?}", &account));
     let sealed_r = sgx_utils::i_seal(account.account.as_bytes(), &get_config_seal_key());
@@ -397,7 +386,7 @@ pub extern "C" fn ec_auth_in_one(
     };
     let mut dauth_signed = vec![];
     match req.sign_mode {
-        SignMode::JWT => {
+        SignMode::Jwt => {
             info("signing jwt");
             let claim = auth.to_jwt_claim(&get_issuer());
             let pem_key = get_config_rsa_key();
@@ -406,7 +395,7 @@ pub extern "C" fn ec_auth_in_one(
             let token = encode(&Header::new(Algorithm::RS256), &claim, &key).unwrap();
             dauth_signed = token.as_bytes().to_vec();
         }
-        SignMode::PROOF => {
+        SignMode::Proof => {
             info("signing proof");
             let eth_string = auth.to_eth_string();
             let signature_b = web3::eth_sign(&eth_string, get_config_edcsa_key());
@@ -420,8 +409,8 @@ pub extern "C" fn ec_auth_in_one(
             return sgx_status_t::SGX_SUCCESS;
         }
     }
-    let cipher_dauth_b = session.encrypt(&dauth_signed);
     info(&format!("dauth is {:?}", &dauth_signed));
+    let cipher_dauth_b = session.encrypt(&dauth_signed);
     info(&format!("cipher dauth is {:?}", &cipher_dauth_b));
     // return
     let account_sgx = out_account.to_json_bytes();
@@ -447,18 +436,13 @@ pub extern "C" fn ec_auth_in_one(
 }
 
 fn get_config_seal_key() -> String {
-    let conf = config().inner.lock().unwrap();
+    let conf = &config(None).inner;
     conf.config.seal_key.clone()
 }
 
 fn get_config_edcsa_key() -> String {
-    let conf = config().inner.lock().unwrap();
+    let conf = &config(None).inner;
     conf.config.ecdsa_key.clone()
-}
-
-fn get_config_oauth() -> OAuth {
-    let conf = config().inner.lock().unwrap();
-    conf.config.oauth.clone()
 }
 
 fn get_pub_k_k1() -> [u8; 65] {
@@ -472,12 +456,13 @@ fn get_prv_k() -> sgx_ec256_private_t {
 }
 
 fn get_issuer() -> String {
-    let conf = config().inner.lock().unwrap();
+    let conf = &config(None).inner;
     conf.config.jwt_issuer.clone()
 }
 
 fn get_config_rsa_key() -> String {
-    config().inner.lock().unwrap().config.rsa_key.clone()
+    let conf = &config(None).inner;
+    conf.config.rsa_key.clone()
 }
 
 //TODO: get sign pub key automatically

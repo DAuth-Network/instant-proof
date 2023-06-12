@@ -23,7 +23,7 @@ pub struct Session {
     pub shr_k: [u8; 16],
     pub session_id: String, // sha256
     pub code: String,
-    pub data: String,
+    pub data: InnerAccount,
 }
 
 impl Session {
@@ -32,7 +32,7 @@ impl Session {
             shr_k: shr_k,
             session_id: session_id,
             code: "".to_string(),
-            data: "".to_string(),
+            data: InnerAccount::default(),
         }
     }
 

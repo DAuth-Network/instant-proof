@@ -2,6 +2,7 @@ use super::*;
 use crate::model::*;
 use mysql::prelude::*;
 use mysql::*;
+use std::str::FromStr;
 
 pub fn insert_account_if_new(pool: &Pool, account: &Account) -> GenericResult<()> {
     let existing_account = query_account(pool, &account)?;

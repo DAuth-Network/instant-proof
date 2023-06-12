@@ -4,7 +4,7 @@ use std::fmt::*;
 use std::string::*;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Email {
+pub struct OtpChannelConf {
     pub account: String,
     pub password: String,
     pub sender: String,
@@ -12,15 +12,13 @@ pub struct Email {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Sms {
-    pub account: String,
-    pub password: String,
-    pub sender: String,
-    pub server: String,
+pub struct OtpChannel {
+    pub sms: OtpChannelConf,
+    pub email: OtpChannelConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OAuthClient {
+pub struct OAuthConf {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
@@ -28,15 +26,15 @@ pub struct OAuthClient {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuth {
-    pub github: OAuthClient,
-    pub google: OAuthClient,
+    pub github: OAuthConf,
+    pub google: OAuthConf,
+    pub apple: OAuthConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
-    pub email: Email,
+    pub otp: OtpChannel,
     pub oauth: OAuth,
-    pub sms: Sms,
     pub rsa_key: String,
     pub ecdsa_key: String,
     pub seal_key: String,
@@ -47,11 +45,14 @@ pub struct TeeConfig {
 impl std::default::Default for TeeConfig {
     fn default() -> Self {
         Self {
-            email: Email::default(),
-            sms: Sms::default(),
+            otp: OtpChannel {
+                sms: OtpChannelConf::default(),
+                email: OtpChannelConf::default(),
+            },
             oauth: OAuth {
-                github: OAuthClient::default(),
-                google: OAuthClient::default(),
+                github: OAuthConf::default(),
+                google: OAuthConf::default(),
+                apple: OAuthConf::default(),
             },
             rsa_key: emp(),
             ecdsa_key: emp(),
@@ -62,7 +63,7 @@ impl std::default::Default for TeeConfig {
     }
 }
 
-impl OAuthClient {
+impl OAuthConf {
     fn default() -> Self {
         Self {
             client_id: emp(),
@@ -72,18 +73,7 @@ impl OAuthClient {
     }
 }
 
-impl Email {
-    fn default() -> Self {
-        Self {
-            account: emp(),
-            password: emp(),
-            sender: emp(),
-            server: emp(),
-        }
-    }
-}
-
-impl Sms {
+impl OtpChannelConf {
     fn default() -> Self {
         Self {
             account: emp(),
@@ -99,22 +89,8 @@ fn emp() -> String {
 }
 
 #[test]
-fn test_email_creation() {
-    let email = Email {
-        account: "example@example.com".to_string(),
-        password: "password".to_string(),
-        sender: "John Doe".to_string(),
-        server: "localhost".to_string(),
-    };
-    assert_eq!(email.account, "example@example.com");
-    assert_eq!(email.password, "password");
-    assert_eq!(email.sender, "John Doe");
-    assert_eq!(email.server, "localhost");
-}
-
-#[test]
 fn test_oauth_client_creation() {
-    let oauth_client = OAuthClient {
+    let oauth_client = OAuthConf {
         client_id: "client_id".to_string(),
         client_secret: "client_secret".to_string(),
         redirect_url: "redirect_url".to_string(),
@@ -127,31 +103,11 @@ fn test_oauth_client_creation() {
 #[test]
 fn test_oauth_creation() {
     let oauth = OAuth {
-        github: OAuthClient::default(),
-        google: OAuthClient::default(),
+        github: OAuthConf::default(),
+        google: OAuthConf::default(),
+        apple: OAuthConf::default(),
     };
     assert_eq!(oauth.github.client_id, "");
     assert_eq!(oauth.github.client_secret, "");
     assert_eq!(oauth.github.redirect_url, "");
-}
-
-#[test]
-fn test_tee_config_creation() {
-    let tee_config = TeeConfig {
-        email: Email::default(),
-        sms: Sms::default(),
-        oauth: OAuth {
-            github: OAuthClient::default(),
-            google: OAuthClient::default(),
-        },
-        rsa_key: emp(),
-        ecdsa_key: emp(),
-        seal_key: emp(),
-        proof_issuer: emp(),
-        jwt_issuer: emp(),
-    };
-    assert_eq!(tee_config.email.account, "");
-    assert_eq!(tee_config.oauth.github.client_id, "");
-    assert_eq!(tee_config.rsa_key, "");
-    assert_eq!(tee_config.seal_key, "");
 }

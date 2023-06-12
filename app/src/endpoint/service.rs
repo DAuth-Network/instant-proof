@@ -19,7 +19,6 @@ use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
 use mysql::*;
 use sgx_types::*;
-use std::fmt::Display;
 
 use super::session::SessionState;
 use super::tee::*;
@@ -140,7 +139,7 @@ pub struct AuthOtpReq {
     client_id: String,
     session_id: String,
     cipher_account: String,
-    account_type: String,
+    account_type: AuthType,
     request_id: Option<String>,
 }
 
@@ -170,15 +169,10 @@ pub async fn send_otp(
         tee.close_session(&req.session_id);
         return fail_resp(derr::Error::new(derr::ErrorKind::SessionError));
     }
-
-    let auth_type = match AuthType::from_str(&req.account_type) {
-        Some(t) => t,
-        None => AuthType::Email,
-    };
     let auth_otp_in = OtpIn {
         session_id: &req.session_id,
         cipher_account: &req.cipher_account,
-        auth_type,
+        auth_type: req.account_type,
     };
     match tee.send_otp(auth_otp_in) {
         Ok(r) => succ_resp(),
@@ -187,18 +181,18 @@ pub async fn send_otp(
 }
 
 #[derive(Deserialize)]
-pub struct AuthOtpConfirmReq {
+pub struct AuthInOneReq {
     client_id: String,
     session_id: String,
     cipher_code: String,
-    auth_type: Option<String>,
+    auth_type: AuthType,
     request_id: Option<String>,
-    sign_mode: Option<String>, // default proof, or JWT
+    sign_mode: Option<SignMode>, // default proof, or JWT
 }
 
 #[post("/auth_in_one")]
 pub async fn auth_in_one(
-    req: web::Json<AuthOtpConfirmReq>,
+    req: web::Json<AuthInOneReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
     sessions: web::Data<session::SessionState>,
@@ -222,20 +216,13 @@ pub async fn auth_in_one(
         tee.close_session(&req.session_id);
         return fail_resp(derr::Error::new(derr::ErrorKind::SessionError));
     }
-    let sign_mode = match &req.sign_mode {
-        Some(r) => match SignMode::from_str(&r) {
-            Some(s) => s,
-            None => SignMode::PROOF,
-        },
-        None => SignMode::PROOF,
-    };
     let request_id = match &req.request_id {
         Some(r) => r,
         None => "None",
     };
-    let auth_type = match &req.auth_type {
-        Some(r) => r,
-        None => "None",
+    let sign_mode = match &req.sign_mode {
+        Some(r) => r.to_owned(),
+        None => SignMode::Proof,
     };
     let auth_in = AuthIn {
         session_id: &req.session_id,
@@ -243,7 +230,7 @@ pub async fn auth_in_one(
         request_id: &request_id,
         iat: utils::system_time(),
         client: &client,
-        auth_type: &auth_type,
+        auth_type: req.auth_type,
         sign_mode,
     };
     let auth_result = tee.auth_dauth(auth_in);

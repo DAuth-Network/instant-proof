@@ -38,7 +38,7 @@ pub struct DbConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Email {
+pub struct OtpChannelConf {
     pub account: String,
     pub password: String,
     pub sender: String,
@@ -46,17 +46,16 @@ pub struct Email {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Sms {
-    pub account: String,
-    pub password: String,
-    pub sender: String,
-    pub server: String,
+pub struct OtpChannel {
+    pub sms: OtpChannelConf,
+    pub email: OtpChannelConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuth {
     pub github: OAuthClient,
     pub google: OAuthClient,
+    pub apple: OAuthClient,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -76,8 +75,7 @@ pub struct OAuthClient {
 pub struct DauthConfig {
     pub api: Api,
     pub db: Db,
-    pub email: Email,
-    pub sms: Sms,
+    pub otp: OtpChannel,
     pub oauth: OAuth,
     pub proof_issuer: String,
     pub jwt_issuer: String,
@@ -85,9 +83,8 @@ pub struct DauthConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
-    pub email: Email,
+    pub otp: OtpChannel,
     pub oauth: OAuth,
-    pub sms: Sms,
     pub rsa_key: String,
     pub ecdsa_key: String,
     pub seal_key: String,
@@ -98,8 +95,7 @@ pub struct TeeConfig {
 impl DauthConfig {
     pub fn to_tee_config(&self, rsa_key: String, ecdsa_key: String, seal_key: String) -> TeeConfig {
         TeeConfig {
-            email: self.email.clone(),
-            sms: self.sms.clone(),
+            otp: self.otp.clone(),
             oauth: self.oauth.clone(),
             rsa_key: rsa_key,
             ecdsa_key: ecdsa_key,
