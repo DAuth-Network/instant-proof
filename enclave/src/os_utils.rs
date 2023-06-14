@@ -6,6 +6,7 @@ use std::net::TcpStream;
 use std::str;
 use std::string::String;
 use std::string::ToString;
+use std::time::*;
 use std::vec::Vec;
 
 pub fn encode_hex(bytes: &[u8]) -> String {
@@ -53,6 +54,14 @@ fn decode_hex_digit(digit: char) -> GenericResult<u8> {
         'a'..='f' => Ok(digit as u8 - 'a' as u8 + 10),
         'A'..='F' => Ok(digit as u8 - 'A' as u8 + 10),
         _ => Err(GenericError::from("decode error")),
+    }
+}
+
+/// Get system time now in u64 format
+pub fn system_time() -> u64 {
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(n) => n.as_secs(),
+        Err(_) => panic!("SystemTime before UNIX EPOCH!"),
     }
 }
 

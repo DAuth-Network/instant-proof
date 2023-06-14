@@ -2,12 +2,14 @@ use super::config::OAuthConf;
 use super::err::*;
 use super::log::*;
 use crate::model::AuthType;
+use crate::os_utils::*;
 use crate::*;
 use http_req::{
     request::{post, Method, RequestBuilder},
     tls,
     uri::Uri,
 };
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde_json::{json, to_string, Result, Value};
 use std::collections::HashMap;
 use std::net::TcpStream;
@@ -103,6 +105,7 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
 }
 
 fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+    let client_secret = gen_apple_client_secret(&conf);
     let token_req = format!(
         "code={}&client_id={}&client_secret={}&grant_type={}",
         code, conf.client_id, conf.client_secret, "authorization_code"
@@ -129,7 +132,28 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     }
 }
 
-pub fn extract_apple_token(token: &str, pub_key: &str) -> Option<AppleIdToken> {
+fn gen_apple_client_secret(conf: &OAuthConf) -> String {
+    let t = system_time();
+    println!("current iat {}", t);
+    let claims = AppleClientSecret {
+        iss: &conf.iss.as_ref().unwrap(),
+        sub: &conf.sub.as_ref().unwrap(),
+        aud: "https://appleid.apple.com",
+        iat: t,
+        exp: t + 3600,
+    };
+    let pem_key = &conf.client_secret;
+    let pem_key_b = pem_key.as_bytes();
+    let key = EncodingKey::from_rsa_pem(pem_key_b).unwrap();
+    let header = Header {
+        alg: Algorithm::RS256,
+        kid: Some(conf.kid.as_ref().unwrap().to_string()),
+        ..Default::default()
+    };
+    encode(&header, &claims, &key).unwrap()
+}
+
+fn extract_apple_token(token: &str, pub_key: &str) -> Option<AppleIdToken> {
     let mut validation = Validation::new(Algorithm::RS256);
     let token_data = decode::<AppleIdToken>(
         &token,
@@ -159,6 +183,15 @@ pub struct AppleIdToken {
     pub is_private_email: bool,
     pub real_user_status: u64,
     pub transfer_sub: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppleClientSecret<'a> {
+    pub iss: &'a str,
+    pub sub: &'a str,
+    pub aud: &'a str,
+    pub iat: u64,
+    pub exp: u64,
 }
 
 /*

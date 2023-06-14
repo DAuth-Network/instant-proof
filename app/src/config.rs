@@ -53,9 +53,9 @@ pub struct OtpChannel {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OAuth {
-    pub github: OAuthClient,
-    pub google: OAuthClient,
-    pub apple: OAuthClient,
+    pub github: OAuthConf,
+    pub google: OAuthConf,
+    pub apple: OAuthConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -65,10 +65,13 @@ pub struct Db {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct OAuthClient {
+pub struct OAuthConf {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
+    pub kid: Option<String>,
+    pub iss: Option<String>,
+    pub sub: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

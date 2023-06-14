@@ -513,6 +513,8 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 //Testing functions
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
+    let t = os_utils::system_time();
+    println!("current iat {}", t);
     sgx_status_t::SGX_SUCCESS
 }
 

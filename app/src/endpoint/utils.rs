@@ -3,7 +3,6 @@ use std::time::SystemTime;
 #[macro_use]
 use time::{PrimitiveDateTime, format_description};
 use chrono::prelude::*;
-use std::boxed::Box;
 
 // pub type GenericError = Box<dyn std::error::Error + Send + Sync + 'static>;
 // pub type GenericResult<T> = Result<T, GenericError>;
