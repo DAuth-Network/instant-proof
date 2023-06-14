@@ -159,9 +159,10 @@ fn gen_apple_client_secret(conf: &OAuthConf) -> String {
 }
 
 pub fn extract_apple_token(token: &str) -> Option<String> {
-    let token_r = dangerous_insecure_decode::<AppleIdToken>(&token);
+    println!("extract apple token: {}", token);
+    let token_r = dangerous_insecure_decode::<AppleIdToken>(token);
     if token_r.is_err() {
-        info("apple id_token decode failed");
+        println!("apple id_token decode failed {}", token_r.err().unwrap());
         return None;
     }
     let token = token_r.unwrap();
