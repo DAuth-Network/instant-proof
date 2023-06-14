@@ -10,7 +10,8 @@ use http_req::{
     uri::Uri,
 };
 use jsonwebtoken::{
-    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+    dangerous_insecure_decode, decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey,
+    Header, Validation,
 };
 use serde_json::{json, to_string, Result, Value};
 use std::borrow::ToOwned;
@@ -157,7 +158,18 @@ fn gen_apple_client_secret(conf: &OAuthConf) -> String {
     encode(&header, &claims, &key).unwrap()
 }
 
-fn extract_apple_token(token: &str) -> Option<String> {
+pub fn extract_apple_token(token: &str) -> Option<String> {
+    let token_r = dangerous_insecure_decode::<AppleIdToken>(&token);
+    if token_r.is_err() {
+        info("apple id_token decode failed");
+        return None;
+    }
+    let token = token_r.unwrap();
+    let claims = token.claims;
+    Some(claims.sub)
+}
+
+fn extract_apple_token_strict(token: &str) -> Option<String> {
     let header_r = decode_header(token);
     if header_r.is_err() {
         info("apple id_token decode header failed");
@@ -234,13 +246,15 @@ pub struct AppleIdToken {
     pub aud: String,
     pub iat: u64,
     pub exp: u64,
-    pub nonce: String,
-    pub nonce_supported: bool,
-    pub email: String,
-    pub email_verified: bool,
-    pub is_private_email: bool,
-    pub real_user_status: u64,
-    pub transfer_sub: String,
+    /*
+       pub nonce: String,
+       pub nonce_supported: bool,
+       pub email: String,
+       pub email_verified: bool,
+       pub is_private_email: bool,
+       pub real_user_status: u64,
+       pub transfer_sub: String,
+    */
 }
 
 #[derive(Debug, Serialize, Deserialize)]

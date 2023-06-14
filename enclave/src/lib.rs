@@ -51,7 +51,9 @@ use self::err::*;
 use self::log::*;
 use self::model::*;
 use self::session::*;
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{
+    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
 use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
 
