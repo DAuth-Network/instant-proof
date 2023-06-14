@@ -126,9 +126,9 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     if v["id_token"].is_null() {
         return Err(GenericError::from("github oauth failed"));
     }
-    let token = v["id_token"].clone().to_string();
+    let token = v["id_token"].as_str().unwrap();
     info(&format!("apple id_token {}", token));
-    match extract_apple_token(&token) {
+    match extract_apple_token(token) {
         Some(r) => Ok(InnerAccount {
             account: r,
             auth_type: AuthType::Apple,
