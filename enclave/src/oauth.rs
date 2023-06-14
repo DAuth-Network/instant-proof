@@ -148,7 +148,7 @@ fn gen_apple_client_secret(conf: &OAuthConf) -> String {
     let pem_key_b = pem_key.as_bytes();
     let key = EncodingKey::from_ec_pem(pem_key_b).unwrap();
     let header = Header {
-        alg: Algorithm::RS256,
+        alg: Algorithm::ES256,
         kid: Some(conf.kid.as_ref().unwrap().to_string()),
         ..Default::default()
     };
