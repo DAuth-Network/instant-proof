@@ -9,8 +9,11 @@ use http_req::{
     tls,
     uri::Uri,
 };
-use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{
+    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
 use serde_json::{json, to_string, Result, Value};
+use std::borrow::ToOwned;
 use std::collections::HashMap;
 use std::net::TcpStream;
 use std::string::String;
@@ -124,9 +127,9 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     }
     let token = v["id_token"].clone().to_string();
     info(&format!("apple id_token {}", token));
-    match extract_apple_token(&token, "") {
+    match extract_apple_token(&token) {
         Some(r) => Ok(InnerAccount {
-            account: r.email,
+            account: r,
             auth_type: AuthType::Apple,
         }),
         None => Err(GenericError::from("google oauth failed")),
@@ -135,7 +138,6 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
 
 fn gen_apple_client_secret(conf: &OAuthConf) -> String {
     let t = system_time();
-    println!("current iat {}", t);
     let claims = AppleClientSecret {
         iss: &conf.iss.as_ref().unwrap(),
         sub: &conf.sub.as_ref().unwrap(),
@@ -155,20 +157,74 @@ fn gen_apple_client_secret(conf: &OAuthConf) -> String {
     encode(&header, &claims, &key).unwrap()
 }
 
-fn extract_apple_token(token: &str, pub_key: &str) -> Option<AppleIdToken> {
+fn extract_apple_token(token: &str) -> Option<String> {
+    let header_r = decode_header(token);
+    if header_r.is_err() {
+        info("apple id_token decode header failed");
+        return None;
+    }
+    let header = header_r.unwrap();
+    let kid_o = header.kid;
+    if kid_o.is_none() {
+        info("apple id_token decode header kid is none");
+        return None;
+    }
+    let kid = kid_o.unwrap();
+    let pub_key_o = get_apple_pub_key(&kid);
+    if pub_key_o.is_none() {
+        info("apple id_token decode header pub_key is none");
+        return None;
+    }
+    let pub_key = pub_key_o.unwrap();
+    let rsa_pub_key = DecodingKey::from_rsa_components(&pub_key.n, &pub_key.e);
     let mut validation = Validation::new(Algorithm::RS256);
-    let token_data = decode::<AppleIdToken>(
-        &token,
-        &DecodingKey::from_secret(pub_key.as_ref()),
-        &validation,
-    );
+    let token_data = decode::<AppleIdToken>(&token, &rsa_pub_key, &validation);
     match token_data {
-        Ok(t) => Some(t.claims),
+        Ok(t) => Some(t.claims.sub),
         _ => {
             info("apple id_token decode failed");
             None
         }
     }
+}
+
+fn get_apple_pub_key(kid: &str) -> Option<Key> {
+    let response_r = http_req(
+        "https://appleid.apple.com/auth/keys",
+        Method::GET,
+        None,
+        HashMap::new(),
+    );
+    if response_r.is_err() {
+        info("apple id_token get pub_key failed");
+        return None;
+    }
+    let response = response_r.unwrap();
+    let keys: Keys = serde_json::from_str(&response).unwrap();
+    for k in keys.keys.iter() {
+        if k.kid.eq(&kid) {
+            let n = k.n.to_string();
+            let e = k.e.to_string();
+            return Some(k.to_owned());
+        }
+    }
+    None
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Keys {
+    keys: Vec<Key>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Key {
+    pub kty: String,
+    pub kid: String,
+    #[serde(rename = "use")]
+    pub use1: String,
+    pub alg: String,
+    pub n: String,
+    pub e: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
