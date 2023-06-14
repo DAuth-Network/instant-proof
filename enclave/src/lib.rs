@@ -513,16 +513,6 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 //Testing functions
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
-    /*    let pem_key = "-----BEGIN PRIVATE KEY-----
-    MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgJMLphFektFhOlYXk
-    mGPlskBvnPebPQjzePVKNsWkHOqgCgYIKoZIzj0DAQehRANCAASFgDIrFhw7VbIi
-    DK7VOCuUyfMFYE6JS+p2q7vXybWUM8p6g9JI2FOu1dFBwf2f18RCOeyJCjeytJEg
-    7DuZVBrT
-    -----END PRIVATE KEY-----";
-        println!("{}", &pem_key);
-        let pem_key_b = pem_key.as_bytes();
-        let key = EncodingKey::from_ec_pem(pem_key_b).unwrap();
-     */
     sgx_status_t::SGX_SUCCESS
 }
 
