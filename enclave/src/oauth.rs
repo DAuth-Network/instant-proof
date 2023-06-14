@@ -106,9 +106,10 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
 
 fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let client_secret = gen_apple_client_secret(&conf);
+    info(&client_secret);
     let token_req = format!(
         "code={}&client_id={}&client_secret={}&grant_type={}",
-        code, conf.client_id, conf.client_secret, "authorization_code"
+        code, conf.client_id, client_secret, "authorization_code"
     );
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
