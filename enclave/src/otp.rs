@@ -146,7 +146,7 @@ impl OtpChannelClient for MailChannelClient {
 </body>
 
 </html>
-    ."###,
+."###,
             from_account, to_account, c_code
         );
         let result = tls_write(&mut stream, m_lines);
