@@ -2,6 +2,7 @@ use super::config;
 use super::err::*;
 use super::log::*;
 use crate::*;
+use alloc::borrow::ToOwned;
 use http_req::{
     request::{Method, RequestBuilder},
     tls,
@@ -137,14 +138,14 @@ impl OtpChannelClient for MailApiChannelClient {
     }
     fn send_otp(&self, to_account: &str, client: &Client, c_code: &str) -> GenericResult<()> {
         let text_content = match client.mail_text_template {
-            Some(ref t) => format!(t, c_code),
+            Some(ref t) => t.replace("{{code}}", c_code),
             None => format!(
                 "Please use the following code to verify your account:\n{}",
                 c_code
             ),
         };
         let html_content = match client.mail_html_template {
-            Some(ref t) => format!(t, c_code),
+            Some(ref t) => t.replace("{{code}}", c_code),
             None => format!(
                 "Please use the following code to verify your account:<br/>{}",
                 c_code
@@ -152,7 +153,7 @@ impl OtpChannelClient for MailApiChannelClient {
         };
         let subject = match client.mail_subject {
             Some(ref t) => t,
-            None => "DAuth Verification Code".to_string(),
+            None => &"DAuth Verification Code".to_string(),
         };
         let mail_req = EmailApiReq {
             personalizations: vec![Personalization {
@@ -163,7 +164,7 @@ impl OtpChannelClient for MailApiChannelClient {
             from: MailAddress {
                 email: self.conf.sender.to_string(),
             },
-            subject: subject,
+            subject: subject.to_string(),
             content: vec![
                 Content {
                     type_: "text/plain".to_string(),
@@ -189,7 +190,7 @@ impl OtpChannelClient for MailApiChannelClient {
         if mail_resp.is_err() {
             return Err(GenericError::from("http error"));
         }
-        let v: Value = serde_json::from_str(&sms_resp?)?;
+        let v: Value = serde_json::from_str(&mail_resp?)?;
         if v["status"].is_null() {
             return Err(GenericError::from("send sms got an empty response"));
         }

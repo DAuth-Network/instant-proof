@@ -126,7 +126,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
                     mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
-                    mail_api: opt::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
+                    mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
                     sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
                     github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
                     google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
@@ -233,7 +233,7 @@ pub extern "C" fn ec_send_otp(
     }
     // send otp
     let otp_client = otp_client_o.unwrap();
-    let otp_r = otp_client.send_otp(&account, &otp.to_string());
+    let otp_r = otp_client.send_otp(&account, &req.client, &otp.to_string());
     if otp_r.is_err() {
         error("send otp failed");
         unsafe {
