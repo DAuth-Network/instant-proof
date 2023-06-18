@@ -49,6 +49,7 @@ pub struct OtpChannelConf {
 pub struct OtpChannel {
     pub sms: OtpChannelConf,
     pub email: OtpChannelConf,
+    pub email_api: OtpChannelConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

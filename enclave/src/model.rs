@@ -19,6 +19,7 @@ pub struct OtpIn {
     pub session_id: String,
     pub cipher_account: String,
     pub auth_type: AuthType,
+    pub client: Client,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -27,6 +28,9 @@ pub struct Client {
     pub client_id: String,
     pub client_origin: String,
     pub client_redirect_url: String,
+    pub mail_subject: Option<String>,
+    pub mail_text_template: Option<String>,
+    pub mail_html_template: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

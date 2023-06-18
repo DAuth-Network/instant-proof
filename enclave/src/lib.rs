@@ -68,6 +68,7 @@ struct EnclaveState {
 struct EnclaveConfig {
     pub config: TeeConfig,
     pub mail: otp::MailChannelClient,
+    pub mail_api: otp::MailApiChannelClient,
     pub sms: otp::SmsChannelClient,
     pub google: oauth::GoogleOAuthClient,
     pub github: oauth::GithubOAuthClient,
@@ -125,6 +126,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
                     mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
+                    mail_api: opt::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
                     sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
                     github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
                     google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
@@ -186,7 +188,7 @@ pub trait OtpChannelClient {
     fn new(conf: config::OtpChannelConf) -> Self
     where
         Self: Sized;
-    fn send_otp(&self, to_account: &str, c_code: &str) -> GenericResult<()>;
+    fn send_otp(&self, to_account: &str, client: &Client, c_code: &str) -> GenericResult<()>;
 }
 
 #[no_mangle]

@@ -51,6 +51,7 @@ pub struct OtpIn<'a> {
     pub session_id: &'a str,
     pub cipher_account: &'a str,
     pub auth_type: AuthType,
+    pub client: &'a Client,
 }
 
 /// Exchange Key Request includes a user public key for secure channel

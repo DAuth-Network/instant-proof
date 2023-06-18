@@ -15,6 +15,7 @@ pub struct OtpChannelConf {
 pub struct OtpChannel {
     pub sms: OtpChannelConf,
     pub email: OtpChannelConf,
+    pub email_api: OtpChannelConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -51,6 +52,7 @@ impl std::default::Default for TeeConfig {
             otp: OtpChannel {
                 sms: OtpChannelConf::default(),
                 email: OtpChannelConf::default(),
+                email_api: OtpChannelConf::default(),
             },
             oauth: OAuth {
                 github: OAuthConf::default(),
@@ -100,6 +102,9 @@ fn test_oauth_client_creation() {
         client_id: "client_id".to_string(),
         client_secret: "client_secret".to_string(),
         redirect_url: "redirect_url".to_string(),
+        iss: None,
+        kid: None,
+        sub: None,
     };
     assert_eq!(oauth_client.client_id, "client_id");
     assert_eq!(oauth_client.client_secret, "client_secret");

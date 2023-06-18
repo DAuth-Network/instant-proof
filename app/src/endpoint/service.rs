@@ -153,17 +153,17 @@ pub async fn send_otp(
 ) -> HttpResponse {
     info!("auth email with session_id {}", &req.session_id);
     // validate client
-    if get_client(
+    let client_o = get_client(
         &endex.clients,
         &req.client_id,
         &http_req.headers(),
         &endex.env,
-    )
-    .is_none()
-    {
+    );
+    if client_o.is_none() {
         info!("client id not found");
         return fail_resp(derr::Error::new(derr::ErrorKind::ClientError));
     }
+    let client = client_o.unwrap();
     let tee = &endex.tee;
     if !validate_session(&sessions, &req.session_id) {
         tee.close_session(&req.session_id);
@@ -173,6 +173,7 @@ pub async fn send_otp(
         session_id: &req.session_id,
         cipher_account: &req.cipher_account,
         auth_type: req.account_type,
+        client: &client,
     };
     match tee.send_otp(auth_otp_in) {
         Ok(r) => succ_resp(),
