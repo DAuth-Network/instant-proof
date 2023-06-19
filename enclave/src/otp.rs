@@ -16,6 +16,7 @@ use std::str;
 use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
+use base64;
 
 pub fn get_otp_client(auth_type: AuthType) -> Option<&'static dyn OtpChannelClient> {
     let conf = &config(None).inner;
@@ -144,12 +145,25 @@ impl OtpChannelClient for MailApiChannelClient {
             ),
         };
         let html_content = match client.mail_html_template {
-            Some(ref t) => t.replace("{{code}}", c_code),
+            Some(ref t) => {
+                let result = t.as_bytes();
+                let b64 = base64::decode(result);
+                let content = match b64 {
+                    Ok(c) => String::from_utf8(c).unwrap(),
+                    Err(e) => {
+                        error(&format!("decode html template failed: {}", e));
+                        return Err(GenericError::from("decode html template failed"));
+                    }
+                };
+                content.replace("{{code}}", c_code)
+            }
             None => format!(
                 "<h1>Please</h1> use the following code to verify your account:<br/>{}",
                 c_code
             ),
         };
+        debug(&format!("text content: {}", &text_content));
+        debug(&format!("html content: {}", &html_content));
         let subject = match client.mail_subject {
             Some(ref t) => t,
             None => "DAuth Verification Code",
@@ -190,6 +204,7 @@ impl OtpChannelClient for MailApiChannelClient {
             return Err(GenericError::from("http error"));
         }
         // empty response is OK
+        info("sendmail ok")
         Ok(())
     }
 }

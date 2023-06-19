@@ -12,6 +12,7 @@ extern crate tiny_keccak;
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
 extern crate sgx_tstd as std;
+extern crate base64;
 extern crate http_req;
 extern crate serde;
 extern crate serde_json;
