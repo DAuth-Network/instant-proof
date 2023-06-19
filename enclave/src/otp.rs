@@ -152,7 +152,7 @@ impl OtpChannelClient for MailApiChannelClient {
         };
         let subject = match client.mail_subject {
             Some(ref t) => t,
-            None => &"DAuth Verification Code".to_string(),
+            None => "DAuth Verification Code",
         };
         let mail_req = EmailApiReq {
             personalizations: vec![Personalization {
