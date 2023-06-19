@@ -2,7 +2,6 @@ use super::config;
 use super::err::*;
 use super::log::*;
 use crate::*;
-use alloc::borrow::ToOwned;
 use http_req::{
     request::{Method, RequestBuilder},
     tls,
@@ -147,7 +146,7 @@ impl OtpChannelClient for MailApiChannelClient {
         let html_content = match client.mail_html_template {
             Some(ref t) => t.replace("{{code}}", c_code),
             None => format!(
-                "Please use the following code to verify your account:<br/>{}",
+                "<h1>Please</h1> use the following code to verify your account:<br/>{}",
                 c_code
             ),
         };
@@ -190,20 +189,8 @@ impl OtpChannelClient for MailApiChannelClient {
         if mail_resp.is_err() {
             return Err(GenericError::from("http error"));
         }
-        let v: Value = serde_json::from_str(&mail_resp?)?;
-        if v["status"].is_null() {
-            return Err(GenericError::from("send sms got an empty response"));
-        }
-        let status = v["status"].as_str().unwrap();
-        info(&status);
-        match status {
-            "queued" => Ok(()),
-            "sent" => Ok(()),
-            _ => {
-                error(&format!("sms failed: {:?}", v));
-                Err(GenericError::from("sms failed"))
-            }
-        }
+        // empty response is OK
+        Ok(())
     }
 }
 
