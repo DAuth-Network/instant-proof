@@ -2,6 +2,7 @@ use super::config;
 use super::err::*;
 use super::log::*;
 use crate::*;
+use base64;
 use http_req::{
     request::{Method, RequestBuilder},
     tls,
@@ -16,7 +17,6 @@ use std::str;
 use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
-use base64;
 
 pub fn get_otp_client(auth_type: AuthType) -> Option<&'static dyn OtpChannelClient> {
     let conf = &config(None).inner;
@@ -204,7 +204,7 @@ impl OtpChannelClient for MailApiChannelClient {
             return Err(GenericError::from("http error"));
         }
         // empty response is OK
-        info("sendmail ok")
+        info("sendmail ok");
         Ok(())
     }
 }
