@@ -16,13 +16,14 @@ pub fn insert_account_if_new(pool: &Pool, account: &Account) -> GenericResult<()
 pub fn insert_account(pool: &Pool, account: &Account) -> GenericResult<()> {
     let mut conn = pool.get_conn()?;
     let mut tx = conn.start_transaction(TxOpts::default())?;
-    let stmt = "insert into account(acc_hash, acc_seal, auth_type) values (?,?,?)";
+    let stmt = "insert into account(acc_hash, acc_seal, auth_type, id_type) values (?,?,?,?)";
     tx.exec_drop(
         stmt,
         (
             &account.acc_hash,
             &account.acc_seal,
             &account.auth_type.to_string(),
+            &account.id_type.to_string(),
         ),
     )?;
     tx.commit()?;
@@ -33,7 +34,7 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
     let mut result: Vec<Account> = Vec::new();
     let mut conn = pool.get_conn()?;
     let stmt = format!(
-        "select acc_hash, acc_seal, auth_type from account where acc_hash='{}' and auth_type='{}'",
+        "select acc_hash, acc_seal, auth_type, id_type from account where acc_hash='{}' and auth_type='{}'",
         account.acc_hash,
         account.auth_type.to_string()
     );
@@ -42,11 +43,13 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
             std::string::String,
             std::string::String,
             std::string::String,
+            std::string::String,
         ) = from_row(row.unwrap());
         result.push(Account {
             acc_hash: r.0,
             acc_seal: r.1,
             auth_type: AuthType::from_str(&r.2).unwrap(),
+            id_type: IdType::from_str(&r.3).unwrap(),
         });
     });
     Ok(result)
@@ -57,11 +60,12 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
     let mut tx = conn.start_transaction(TxOpts::default())?;
     tx.exec_drop(
         "insert into auth (
-            acc_hash, auth_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
+            acc_hash, auth_type, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
         ) values (?, ?, ?, ?, ?, ?, ?)",
         (
             hist.acc_hash,
             hist.auth_type.to_string(),
+            hist.id_type.to_string(),
             hist.auth_id,
             hist.audience,
             hist.auth_datetime,

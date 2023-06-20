@@ -61,6 +61,35 @@ pub enum AuthType {
     Apple,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IdType {
+    Mailto,
+    Tel,
+    Id,
+}
+
+impl IdType {
+    pub fn from_auth_type(auth_type: AuthType) -> AuthType {
+        match auth_type {
+            AuthType::Email => IdType::Mailto,
+            AuthType::Sms => IdType::Tel,
+            AuthType::Google => IdType::Mailto,
+            _ => IdType::Id,
+        }
+    }
+}
+
+impl std::fmt::Display for IdType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            IdType::Mailto => write!(f, "mailto"),
+            IdType::Tel => write!(f, "tel"),
+            IdType::Id => write!(f, "id"),
+        }
+    }
+}
+
 impl std::fmt::Display for AuthType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -78,6 +107,7 @@ pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
     pub auth_type: AuthType,
+    pub id_type: IdType,
 }
 
 impl ToJsonBytes for Account {}
@@ -91,7 +121,7 @@ pub struct InnerAuth<'a> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EthAuth {
     pub account: String,
-    pub auth_type: AuthType,
+    pub id_type: IdType,
     pub request_id: String,
 }
 
@@ -118,7 +148,7 @@ impl<'a> InnerAuth<'a> {
     pub fn to_eth_auth(&self) -> EthAuth {
         EthAuth {
             account: self.account.account.clone(),
-            auth_type: self.account.auth_type,
+            id_type: self.account.id_type,
             request_id: self.auth_in.request_id.clone(),
         }
     }
@@ -160,6 +190,7 @@ impl EthSigned {
 pub struct InnerAccount {
     pub account: String,
     pub auth_type: AuthType,
+    pub id_type: IdType,
 }
 
 impl InnerAccount {
@@ -167,6 +198,7 @@ impl InnerAccount {
         Self {
             account: "".to_string(),
             auth_type: AuthType::Email,
+            id_type: IdType::Mailto,
         }
     }
 }

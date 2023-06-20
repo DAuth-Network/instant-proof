@@ -8,6 +8,7 @@ pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
     pub auth_type: AuthType,
+    pub id_type: IdType,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,6 +28,24 @@ pub enum AuthType {
     Apple,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IdType {
+    Mailto,
+    Tel,
+    Id,
+}
+
+impl std::fmt::Display for IdType {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            IdType::Mailto => write!(f, "mailto"),
+            IdType::Tel => write!(f, "tel"),
+            IdType::Id => write!(f, "id"),
+        }
+    }
+}
+
 impl std::fmt::Display for AuthType {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -38,6 +57,19 @@ impl std::fmt::Display for AuthType {
         }
     }
 }
+
+impl FromStr for IdType {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mailto" => Ok(IdType::Mailto),
+            "tel" => Ok(IdType::Tel),
+            "id" => Ok(IdType::Id),
+            _ => Err(()),
+        }
+    }
+}
+
 impl FromStr for AuthType {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -56,6 +88,7 @@ impl FromStr for AuthType {
 pub struct Auth {
     pub acc_hash: String,
     pub auth_type: AuthType,
+    pub id_type: IdType,
     pub auth_id: i32,
     pub auth_datetime: PrimitiveDateTime,
     pub auth_exp: u64,
@@ -68,6 +101,7 @@ impl Auth {
         Self {
             acc_hash: account.acc_hash.clone(),
             auth_type: account.auth_type,
+            id_type: account.id_type,
             auth_id: 0,
             auth_datetime: utils::now_datetime().unwrap(),
             auth_exp: 0,

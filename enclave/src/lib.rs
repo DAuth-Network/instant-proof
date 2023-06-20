@@ -247,6 +247,7 @@ pub extern "C" fn ec_send_otp(
     let inner_account = InnerAccount {
         account: account.to_string(),
         auth_type: req.auth_type,
+        id_type: IdType::from_auth_type(req.auth_type),
     };
     session.data = inner_account;
     update_session(&req.session_id, &session);
@@ -379,6 +380,7 @@ pub extern "C" fn ec_auth_in_one(
     info(&format!("account hash {:?}", raw_hashed));
     let out_account = Account {
         auth_type: account.auth_type,
+        id_type: account.id_type,
         acc_seal: os_utils::encode_hex(&sealed),
         acc_hash: account_hash.clone(),
     };
