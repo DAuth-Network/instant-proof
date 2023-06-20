@@ -61,7 +61,7 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
     tx.exec_drop(
         "insert into auth (
             acc_hash, auth_type, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
-        ) values (?, ?, ?, ?, ?, ?, ?)",
+        ) values (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             hist.acc_hash,
             hist.auth_type.to_string(),
