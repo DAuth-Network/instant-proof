@@ -8,7 +8,12 @@ use tiny_keccak::*;
 pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: String) -> Vec<u8> {
     let prv_k_b = decode_hex(&prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
+    info(&format!(
+        "sign raw parts: {} {} {}",
+        id_type, account, request_id
+    ));
     let msg_b = abi_message(id_type, account, request_id);
+    info(&format!("signing msg is {:?}", &msg_b));
     let msg_sha = hash_abi(&msg_b);
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
