@@ -70,7 +70,7 @@ pub enum IdType {
 }
 
 impl IdType {
-    pub fn from_auth_type(auth_type: AuthType) -> AuthType {
+    pub fn from_auth_type(auth_type: AuthType) -> Self {
         match auth_type {
             AuthType::Email => IdType::Mailto,
             AuthType::Sms => IdType::Tel,
