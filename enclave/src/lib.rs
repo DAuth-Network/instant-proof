@@ -374,7 +374,7 @@ pub extern "C" fn ec_auth_in_one(
             return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
         }
     };
-    let raw_hashed = sgx_utils::hash(account.account.as_bytes()).unwrap();
+    let raw_hashed = web3::eth_hash(account.account.as_bytes());
     let account_hash = os_utils::encode_hex(&raw_hashed);
     info(&format!("account seal {:?}", sealed));
     info(&format!("account hash {:?}", raw_hashed));

@@ -12,9 +12,19 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
         "sign raw parts: {} {} {}",
         id_type, account, request_id
     ));
-    let msg_b = abi_message(id_type, account, request_id);
+    let id_type_hash: [u8; 32] = eth_hash(id_type.as_bytes());
+    let account_hash: [u8; 32] = hex::decode(account).unwrap().try_into().unwrap();
+    // when request_id is hash encoded, decode; else hash it.
+    let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
+        Ok(r) => r,
+        Err(e) => {
+            error(&format!("request_id is not hash encoded: {}", e));
+            eth_hash(request_id)
+        }
+    };
+    let msg_b = abi_message(id_type_hash, accounth_hash, request_id_hash);
     info(&format!("signing msg is {:?}", &msg_b));
-    let msg_sha = hash_abi(&msg_b);
+    let msg_sha = eth_hash(&msg_b);
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
     let last_byte = r_id.serialize() + 27;
@@ -24,14 +34,20 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
     sig_buffer
 }
 
+fn try_decode_hex(s: &str) -> GenericResult<[u8; 32]> {
+    let decode_r = hex::decode(s)?;
+    let result: [u8; 32] = decode_r.try_into()?;
+    Ok(result)
+}
+
 fn abi_message(id_type: &str, account: &str, request_id: &str) -> Vec<u8> {
-    let id_abi = pad_all(id_type);
-    let account_abi = pad_all(account);
-    let request_id_abi = pad_all(request_id);
+    let id_abi = pad_byte32(id_type);
+    let account_abi = pad_byte32(account);
+    let request_id_abi = pad_byte32(request_id);
     abi_combine(id_abi, account_abi, request_id_abi)
 }
 
-fn hash_abi(b: &[u8]) -> [u8; 32] {
+pub fn eth_hash(b: &[u8]) -> [u8; 32] {
     let mut hasher = Keccak::v256();
     let mut output = [0_u8; 32];
     hasher.update(&b);
@@ -40,18 +56,28 @@ fn hash_abi(b: &[u8]) -> [u8; 32] {
 }
 
 fn abi_combine(id_abi: Vec<u8>, account_abi: Vec<u8>, request_id_abi: Vec<u8>) -> Vec<u8> {
-    let mut abi_all =
-        Vec::with_capacity(3 * 32 + id_abi.len() + account_abi.len() + request_id_abi.len());
+    let mut abi_all = Vec::with_capacity(9 * 32);
     abi_all.extend_from_slice(&pad_length(3 * 32 as u16));
-    abi_all.extend_from_slice(&pad_length((96 + id_abi.len()) as u16));
-    abi_all.extend_from_slice(&pad_length((96 + id_abi.len() + &account_abi.len()) as u16));
+    abi_all.extend_from_slice(&pad_length(5 * 32 as u16));
+    abi_all.extend_from_slice(&pad_length(7 * 32 as u16));
     abi_all.extend_from_slice(&id_abi);
     abi_all.extend_from_slice(&account_abi);
     abi_all.extend_from_slice(&request_id_abi);
     abi_all
 }
 
-fn pad_all(s: &str) -> Vec<u8> {
+fn pad_byte32(s: &str) -> Vec<u8> {
+    let hash_s = eth_hash(s);
+    let l_p = pad_length(32);
+    let mut b_p: Vec<u8> = Vec::with_capacity(32);
+    b_p.extend_from_slice(&hash_s);
+    let mut padded = Vec::with_capacity(l_p.len() + padded.len());
+    padded.extend_from_slice(&l_p);
+    padded.extend_from_slice(&padded);
+    padded
+}
+
+fn pad_length_string(s: &str) -> Vec<u8> {
     let l_p = pad_length(s.len() as u16);
     let s_p = pad_string(s);
     let mut padded = Vec::with_capacity(l_p.len() + s_p.len());
