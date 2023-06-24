@@ -1,3 +1,4 @@
+use super::err::*;
 use super::log::*;
 use super::os_utils::*;
 use sgx_types::*;
@@ -13,7 +14,7 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
         id_type, account, request_id
     ));
     let id_type_hash: [u8; 32] = eth_hash(id_type.as_bytes());
-    let account_hash: [u8; 32] = hex::decode(account).unwrap().try_into().unwrap();
+    let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
     // when request_id is hash encoded, decode; else hash it.
     let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
         Ok(r) => r,
@@ -22,7 +23,7 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
             eth_hash(request_id)
         }
     };
-    let msg_b = abi_message(id_type_hash, accounth_hash, request_id_hash);
+    let msg_b = abi_message(id_type_hash, account_hash, request_id_hash);
     info(&format!("signing msg is {:?}", &msg_b));
     let msg_sha = eth_hash(&msg_b);
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
@@ -35,7 +36,7 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
 }
 
 fn try_decode_hex(s: &str) -> GenericResult<[u8; 32]> {
-    let decode_r = hex::decode(s)?;
+    let decode_r = decode_hex(s)?;
     let result: [u8; 32] = decode_r.try_into()?;
     Ok(result)
 }
@@ -71,7 +72,7 @@ fn pad_byte32(s: &str) -> Vec<u8> {
     let l_p = pad_length(32);
     let mut b_p: Vec<u8> = Vec::with_capacity(32);
     b_p.extend_from_slice(&hash_s);
-    let mut padded = Vec::with_capacity(l_p.len() + padded.len());
+    let mut padded = Vec::with_capacity(l_p.len() + b_p.len());
     padded.extend_from_slice(&l_p);
     padded.extend_from_slice(&padded);
     padded
