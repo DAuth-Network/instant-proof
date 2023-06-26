@@ -26,16 +26,24 @@ status() {
         pid=$(cat $pid_file)
         if ps -p $pid > /dev/null; then
             echo "$process_name is running with PID $pid"
-            exit 0
+            return 0
         else
             echo "$process_name PID file exists but process is not running"
             rm $pid_file
-            exit 1
+            return 3
         fi
     else
         echo "$process_name is not running"
-        exit 1
+        return 3
     fi
+}
+
+start_if_not() {
+    status
+    if [ $? -eq 3 ]; then
+        echo "process is down, restart it"
+        start
+    fi 
 }
 
 case "$1" in
@@ -48,8 +56,11 @@ case "$1" in
     status)
         status
         ;;
+    start_if_not)
+        start_if_not
+        ;;
     *)
-        echo "Usage: $0 {start|stop|status}"
+        echo "Usage: $0 {start|stop|status|start_if_not}"
         exit 1
         ;;
 esac
