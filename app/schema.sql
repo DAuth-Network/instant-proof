@@ -43,6 +43,9 @@ create table client (
     client_id varchar(32),
     client_secret_hash varchar(128),
     client_redirect_url varchar(256),
+    mail_subject varchar(128),
+    mail_text_template text,
+    mail_html_template text,
     PRIMARY KEY(client_name)
 )
 ROW_FORMAT=COMPRESSED

@@ -7,5 +7,6 @@ mv key.pem certs/MyKey.key
 
 cp ../app/conf.toml .
 cp ../app/log4rs.yml .
+cp ../scripts/run.sh .
 
 mkdir logs 
