@@ -14,7 +14,6 @@ pub trait TeeAuth {
     fn exchange_key(&self, exk_in: ExchangeKeyIn) -> Result<ExchangeKeyOut, Error>;
     fn send_otp(&self, otp_in: OtpIn) -> Result<(), Error>;
     fn auth_dauth(&self, otp_confirm_in: AuthIn) -> Result<AuthOut, Error>;
-    fn close_session(&self, session_id: &str) -> Result<(), Error>;
 }
 
 #[derive(Debug)]
@@ -183,18 +182,6 @@ impl TeeAuth for TeeService {
                 Err(Error::new(ErrorKind::SgxError))
             }
         }
-    }
-
-    fn close_session(&self, session_id: &str) -> Result<(), Error> {
-        let session_id_b: [u8; 32] = hex::decode(&session_id).unwrap().try_into().unwrap();
-        let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-        let result = self.pool.install(|| unsafe {
-            ecall::ec_close_session(self.enclave.geteid(), &mut sgx_result, &session_id_b)
-        });
-        if !sgx_success(result) || !sgx_success(sgx_result) {
-            error!("tee call failed.");
-        }
-        Ok(())
     }
 }
 

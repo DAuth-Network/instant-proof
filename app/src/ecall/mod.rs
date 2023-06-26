@@ -19,12 +19,6 @@ extern "C" {
         config_b_size: usize,
     ) -> sgx_status_t;
 
-    pub fn ec_close_session(
-        eid: sgx_enclave_id_t,
-        retval: *mut sgx_status_t,
-        session_id: &[u8; 32],
-    ) -> sgx_status_t;
-
     pub fn ec_send_otp(
         eid: sgx_enclave_id_t,
         retval: *mut sgx_status_t,

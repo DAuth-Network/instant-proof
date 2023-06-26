@@ -20,10 +20,6 @@ enclave {
             int config_b_size
         );
 
-        public sgx_status_t ec_close_session(
-            [in, size=32]uint8_t* session_id
-        );
-
         public sgx_status_t ec_send_otp(
             [in, size=otp_req_size]uint8_t* otp_req,
             int otp_req_size,

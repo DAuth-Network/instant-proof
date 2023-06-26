@@ -5,7 +5,7 @@ pid_file="./$process_name.pid"
 
 start() {
     echo "Starting $process_name..."
-    daemon_cmd="./app"
+    daemon_cmd="./app 2>&1 > logs/app.log"
     $daemon_cmd & 
     echo $! > $pid_file
 }

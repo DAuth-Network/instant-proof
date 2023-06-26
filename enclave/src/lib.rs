@@ -216,6 +216,7 @@ pub extern "C" fn ec_send_otp(
         unsafe {
             *error_code = Error::new(ErrorKind::SessionError).to_int();
         }
+        ec_close_session(&req.session_id);
         return sgx_status_t::SGX_SUCCESS;
     }
     // decrypt account
@@ -330,6 +331,7 @@ pub extern "C" fn ec_auth_in_one(
         unsafe {
             *error_code = Error::new(ErrorKind::SessionError).to_int();
         }
+        ec_close_session(&req.session_id);
         return sgx_status_t::SGX_SUCCESS;
     }
     // decrypt code
@@ -503,8 +505,7 @@ pub extern "C" fn ec_get_sign_pub_key(
     sgx_status_t::SGX_SUCCESS
 }
 
-#[no_mangle]
-pub extern "C" fn ec_close_session(session_id: &String) -> sgx_status_t {
+fn ec_close_session(session_id: &String) -> sgx_status_t {
     let mut enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.close_session(session_id);
     sgx_status_t::SGX_SUCCESS
