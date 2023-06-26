@@ -211,6 +211,13 @@ pub extern "C" fn ec_send_otp(
         return sgx_status_t::SGX_SUCCESS;
     }
     let mut session = session_r.unwrap();
+    if session.expire() {
+        error(&format!("sgx session {:?} expired.", &req.session_id));
+        unsafe {
+            *error_code = Error::new(ErrorKind::SessionError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
     // decrypt account
     let account_r = decrypt_text_to_text(&req.cipher_account, &session);
     if account_r.is_err() {
@@ -318,6 +325,13 @@ pub extern "C" fn ec_auth_in_one(
         return sgx_status_t::SGX_SUCCESS;
     }
     let mut session = session_r.unwrap();
+    if session.expire() {
+        error(&format!("sgx session {:?} expired.", &req.session_id));
+        unsafe {
+            *error_code = Error::new(ErrorKind::SessionError).to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
     // decrypt code
     let code_r = decrypt_text_to_text(&req.cipher_code, &session);
     if code_r.is_err() {

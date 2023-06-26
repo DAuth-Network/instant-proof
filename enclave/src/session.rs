@@ -24,6 +24,7 @@ pub struct Session {
     pub session_id: String, // sha256
     pub code: String,
     pub data: InnerAccount,
+    pub register_time: u64,
 }
 
 impl Session {
@@ -33,6 +34,7 @@ impl Session {
             session_id: session_id,
             code: "".to_string(),
             data: InnerAccount::default(),
+            register_time: os_utils::system_time(),
         }
     }
 
@@ -42,6 +44,11 @@ impl Session {
 
     pub fn encrypt(&self, content: &[u8]) -> Vec<u8> {
         sgx_utils::encrypt(&self.shr_k, content)
+    }
+
+    pub fn expire(&self) -> bool {
+        // session last 10 minutes
+        (os_utils::system_time() - self.register_time) > 60 * 10
     }
 }
 
