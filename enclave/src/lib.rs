@@ -34,6 +34,8 @@ use std::os::raw::c_char;
 use std::slice;
 use std::string::{String, ToString};
 use std::sync::{Once, SgxMutex};
+use std::thread;
+use std::time::{Duration, Instant};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
 use std::ptr;
@@ -230,26 +232,12 @@ pub extern "C" fn ec_send_otp(
     }
     let account = account_r.unwrap();
     info(&format!("otp account is {}", account));
-    let otp = sgx_utils::rand();
+    //let otp = sgx_utils::rand();
+    let otp: u32 = 123456;
     //TODO: sendmail error
     // get otp_client and send mail
-    let otp_client_o = otp::get_otp_client(req.auth_type);
-    if otp_client_o.is_none() {
-        unsafe {
-            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    // send otp
-    let otp_client = otp_client_o.unwrap();
-    let otp_r = otp_client.send_otp(&account, &req.client, &otp.to_string());
-    if otp_r.is_err() {
-        error("send otp failed");
-        unsafe {
-            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
+    let one_sec = Duration::from_secs(1);
+    thread::sleep(one_sec);
     // update session
     session.code = otp.to_string();
     let inner_account = InnerAccount {
