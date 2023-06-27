@@ -42,7 +42,7 @@ pest = "=2.5.6"
 pest_generator = "=2.5.6"
 jsonwebkey-convert = { git = "https://github.com/ksrust/jsonwebkey-rs.git",  version = "0.3.2", features = [ "full" ] }
 subxt = "=0.25.0"
-
+sp-core = "7.0.0"
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_types = { path = "../../../sgx_types" }

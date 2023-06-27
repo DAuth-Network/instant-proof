@@ -38,6 +38,7 @@ use persistence::dclient::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use sp_core::{sr25519, Pair};
 use subxt::{dynamic::Value, tx::PairSigner, OnlineClient, PolkadotConfig};
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
