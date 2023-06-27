@@ -38,6 +38,8 @@ use persistence::dclient::*;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use subxt::{dynamic::Value, tx::PairSigner, OnlineClient, PolkadotConfig};
+
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
 /// Create enclave instance when app starts
@@ -148,12 +150,42 @@ fn load_conf(fname: &str) -> config::DauthConfig {
         .unwrap()
 }
 
+async fn register_node(phrase: &str) {
+    let apir = OnlineClient::<PolkadotConfig>::new().await;
+    let api = match apir {
+        Ok(api) => api,
+        Err(err) => {
+            error!("Error registering");
+            return;
+        }
+    };
+    let pair = sr25519::Pair::from_string(phrase, None).unwrap();
+    let signer = PairSigner::new(pair);
+    // call register_node when start up
+    let tx = subxt::dynamic::tx(
+        "KeyLedger",
+        "register_node",
+        vec![Value::string("testnode")],
+    );
+    // submit the transaction with default params:
+    let hash = api.tx().sign_and_submit_default(&tx, &signer).await;
+    match hash {
+        Ok(hash) => {
+            info!("register_node: {}", hash);
+        }
+        Err(e) => {
+            error!("register_node: {}", e);
+        }
+    }
+}
+
 /// This is the entrance of the web app server.
 /// It binds all api to function defined in mod endpoint.
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     info!("logging!");
+    register_node(&env::var("KS_ACCOUNT").unwrap()).await;
     let conf = load_conf("conf");
     let workers: usize = conf.api.workers.try_into().unwrap();
     let pool = rayon::ThreadPoolBuilder::new()
