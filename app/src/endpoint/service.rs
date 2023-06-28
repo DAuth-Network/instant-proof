@@ -34,8 +34,8 @@ pub struct FailResp {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Status {
-    FAIL,
-    SUCCESS,
+    Fail,
+    Success,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct SuccResp<Data: Serialize2> {
 
 fn fail_resp(err: derr::Error) -> HttpResponse {
     HttpResponse::Ok().json(FailResp {
-        status: Status::FAIL,
+        status: Status::Fail,
         error_code: format!("{:?}", err.kind()),
         error_msg: err.to_string(),
     })
@@ -54,14 +54,14 @@ fn fail_resp(err: derr::Error) -> HttpResponse {
 
 fn succ_resp() -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCCESS,
+        status: Status::Success,
         data: "".to_string(),
     })
 }
 
 fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCCESS,
+        status: Status::Success,
         data: resp,
     })
 }
