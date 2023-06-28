@@ -17,7 +17,6 @@ use crate::model::*;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
 use mysql::*;
-use sgx_types::*;
 
 use super::tee::*;
 
@@ -35,8 +34,8 @@ pub struct FailResp {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Status {
-    FAIL,
-    SUCCESS,
+    Fail,
+    Success,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -47,7 +46,7 @@ pub struct SuccResp<Data: Serialize2> {
 
 fn fail_resp(err: derr::Error) -> HttpResponse {
     HttpResponse::Ok().json(FailResp {
-        status: Status::FAIL,
+        status: Status::Fail,
         error_code: format!("{:?}", err.kind()),
         error_msg: err.to_string(),
     })
@@ -55,14 +54,14 @@ fn fail_resp(err: derr::Error) -> HttpResponse {
 
 fn succ_resp() -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCCESS,
+        status: Status::Success,
         data: "".to_string(),
     })
 }
 
 fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
-        status: Status::SUCCESS,
+        status: Status::Success,
         data: resp,
     })
 }
@@ -113,7 +112,7 @@ pub async fn exchange_key(
     if get_client(
         &endex.clients,
         &req.client_id,
-        &http_req.headers(),
+        http_req.headers(),
         &endex.env,
     )
     .is_none()
@@ -149,7 +148,7 @@ pub async fn send_otp(
     let client_o = get_client(
         &endex.clients,
         &req.client_id,
-        &http_req.headers(),
+        http_req.headers(),
         &endex.env,
     );
     if client_o.is_none() {
@@ -165,7 +164,7 @@ pub async fn send_otp(
         client: &client,
     };
     match tee.send_otp(auth_otp_in) {
-        Ok(r) => succ_resp(),
+        Ok(_) => succ_resp(),
         Err(e) => fail_resp(e),
     }
 }
@@ -192,7 +191,7 @@ pub async fn auth_in_one(
     let client_o = get_client(
         &endex.clients,
         &req.client_id,
-        &http_req.headers(),
+        http_req.headers(),
         &endex.env,
     );
     if client_o.is_none() {
@@ -212,8 +211,7 @@ pub async fn auth_in_one(
     let auth_in = AuthIn {
         session_id: &req.session_id,
         cipher_code: &req.cipher_code,
-        request_id: &request_id,
-        iat: utils::system_time(),
+        request_id,
         client: &client,
         auth_type: req.auth_type,
         sign_mode,

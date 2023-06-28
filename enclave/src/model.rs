@@ -1,4 +1,6 @@
 extern crate serde;
+use crate::os_utils;
+
 use super::os_utils::*;
 use serde::{Deserialize, Serialize};
 use std::fmt::*;
@@ -39,7 +41,6 @@ pub struct AuthIn {
     pub request_id: String, // default None
     pub cipher_code: String,
     pub client: Client,
-    pub iat: u64,
     pub auth_type: AuthType, // default None, when None, compare with otp otherwise, call oauth
     pub sign_mode: SignMode, // default Proof
 }
@@ -153,13 +154,14 @@ impl<'a> InnerAuth<'a> {
         }
     }
     pub fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+        let iat = os_utils::system_time();
         JwtClaims {
             alg: "RS256".to_string(),
             sub: issuer.to_string(),
             iss: issuer.to_string(),
             aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-            iat: self.auth_in.iat,
-            exp: self.auth_in.iat + 3600,
+            iat,
+            exp: iat + 3600,
             uid: self.account.account.clone(),
         }
     }

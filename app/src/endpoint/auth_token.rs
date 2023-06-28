@@ -1,23 +1,23 @@
+use crate::endpoint::utils;
+use actix_web::{
+    get, http::header::HeaderValue, http::header::InvalidHeaderValue,
+    http::header::TryIntoHeaderValue, post, web, Error, FromRequest, HttpRequest, HttpResponse,
+    Responder,
+};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
+use serde_derive::{Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
 use std::{thread, time};
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
-use serde_derive::{Deserialize, Serialize};
-use actix_web::{
-    get, post, web, Error, HttpRequest, HttpResponse, 
-    Responder, FromRequest, http::header::HeaderValue, 
-    http::header::TryIntoHeaderValue, http::header::InvalidHeaderValue};
-use crate::endpoint::utils;
-
 
 /// Claims is used when encode and decode JWT token
-/// fields including: 
+/// fields including:
 /// sub: account name and
-/// exp: expire date 
+/// exp: expire date
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String, 
+    pub sub: String,
     pub sub_t: String,
-    pub exp: usize, 
+    pub exp: usize,
 }
 
 /// Verify token including: checking whether token format is valid,
@@ -29,12 +29,15 @@ pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
         validation.validate_exp = true;
         let token = v.to_str().unwrap();
         let token_data = decode::<Claims>(
-            &token, &DecodingKey::from_secret(secret.as_ref()), &validation);
+            &token,
+            &DecodingKey::from_secret(secret.as_ref()),
+            &validation,
+        );
         match token_data {
             Ok(c) => true,
             _ => {
                 println!("token verify failed");
-                false 
+                false
             }
         }
     } else {
@@ -45,13 +48,16 @@ pub fn verify_token(token_option: Option<&HeaderValue>, secret: &str) -> bool {
 
 /// Extract token extracts sub from Claims,
 /// when extract successfully, returns sub as account name, or None when failure
-pub fn extract_token(token_option: Option<&HeaderValue>, 
-    secret: &str) -> Option<Claims> {
+pub fn extract_token(token_option: Option<&HeaderValue>, secret: &str) -> Option<Claims> {
     if let Some(v) = token_option {
         println!("analyze header {} with {}", v.to_str().unwrap(), secret);
         let mut validation = Validation::new(Algorithm::HS256);
         let token = v.to_str().unwrap();
-        let token_data = decode::<Claims>(&token, &DecodingKey::from_secret(secret.as_ref()), &validation);
+        let token_data = decode::<Claims>(
+            &token,
+            &DecodingKey::from_secret(secret.as_ref()),
+            &validation,
+        );
         match token_data {
             Ok(t) => Some(t.claims),
             _ => {
@@ -62,7 +68,7 @@ pub fn extract_token(token_option: Option<&HeaderValue>,
     } else {
         println!("extract token from header failed");
         None
-    }        
+    }
 }
 
 /// Gen token calls gen_token_n with expire date length
@@ -73,19 +79,19 @@ pub fn gen_token(account: &str, atype: &str, secret: &str) -> String {
 
 /// It generates a new token using Claims and secret,
 /// where Claims including account name as sub, and 7 days ahead as expiry date
-fn gen_token_n(account: &str, atype:&str, secret: &str, n: u64) -> String {
+fn gen_token_n(account: &str, atype: &str, secret: &str, n: u64) -> String {
     println!("{}", utils::system_time());
     encode(
-        &Header::default(), 
-        &Claims{
+        &Header::default(),
+        &Claims {
             sub: account.to_string(),
             sub_t: atype.to_string(),
-            exp: (utils::system_time() + n).try_into().unwrap()
+            exp: (utils::system_time() + n).try_into().unwrap(),
         },
         &EncodingKey::from_secret(secret.to_string().as_bytes()),
-    ).unwrap()
+    )
+    .unwrap()
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -125,7 +131,8 @@ mod tests {
         match extract_token(Some(&header), &secret) {
             Some(c) => {
                 assert_eq!(c.sub, "abc")
-            }, None => {
+            }
+            None => {
                 panic!("tests failed")
             }
         }
@@ -141,17 +148,16 @@ mod tests {
         match extract_token(Some(&header), &secret) {
             Some(c) => {
                 panic!("test failed")
-            },
+            }
             None => {
                 assert!(true)
             }
         }
     }
 
-
     #[test]
     fn test_expired_token() {
-        let token1 = gen_token_n("abc", "email",  "rust123", 1);
+        let token1 = gen_token_n("abc", "email", "rust123", 1);
         let header = HeaderValue::from_str(&token1).unwrap();
         let secret = "rust123";
         // data is "account": "admin@keysafe.network"
@@ -159,5 +165,4 @@ mod tests {
         thread::sleep(one_sec);
         assert_eq!(verify_token(Some(&header), &secret), false)
     }
-
 }
