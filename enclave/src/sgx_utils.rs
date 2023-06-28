@@ -103,6 +103,11 @@ pub fn hash(content: &[u8]) -> GenericResult<([u8; 32])> {
 
 pub fn decrypt(key: &[u8; 16], cipher_text: &[u8]) -> GenericResult<Vec<u8>> {
     info(&format!("aes_gcm_128_decrypt invoked!"));
+    // handle cipher_text length < 16
+    if cipher_text.len() <= 16 {
+        error("encrypted length must not be less than 16 bytes");
+        return Err(GenericError::from("encrypted length shorter than 16"));
+    }
     let mac: &[u8; 16] = &cipher_text[0..16].try_into()?;
     let cipher_text_core = &cipher_text[16..];
     let mut plain_text: Vec<u8> = vec![0; cipher_text_core.len()];
