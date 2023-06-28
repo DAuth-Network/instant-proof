@@ -142,8 +142,8 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
 fn gen_apple_client_secret(conf: &OAuthConf) -> String {
     let t = system_time();
     let claims = AppleClientSecret {
-        iss: &conf.iss.as_ref().unwrap(),
-        sub: &conf.sub.as_ref().unwrap(),
+        iss: conf.iss.as_ref().unwrap(),
+        sub: conf.sub.as_ref().unwrap(),
         aud: "https://appleid.apple.com",
         iat: t,
         exp: t + 3600,
