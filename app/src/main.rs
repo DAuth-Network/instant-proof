@@ -209,12 +209,6 @@ async fn main() -> std::io::Result<()> {
         env: conf.api.env.clone(),
         port: conf.api.port,
     });
-    // ustate stores user state information e.g. confirmation code that sends
-    // to user's mailbox.
-    let ustate: web::Data<endpoint::session::SessionState> =
-        web::Data::new(endpoint::session::SessionState {
-            state: Arc::new(Mutex::new(HashMap::new())),
-        });
 
     // add certs to server for https service api
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
@@ -233,7 +227,6 @@ async fn main() -> std::io::Result<()> {
             //.wrap(middleware::Logger::default())
             .wrap(cors)
             .app_data(web::Data::clone(&edata))
-            .app_data(web::Data::clone(&ustate))
             .service(
                 web::scope(&subpath)
                     .service(exchange_key)

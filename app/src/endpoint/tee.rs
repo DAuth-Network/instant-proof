@@ -24,10 +24,7 @@ pub struct TeeService {
 
 impl TeeService {
     pub fn new(enclave: SgxEnclave, pool: rayon::ThreadPool) -> Self {
-        Self {
-            enclave: enclave,
-            pool: pool,
-        }
+        Self { enclave, pool }
     }
 }
 
@@ -60,7 +57,6 @@ pub struct AuthIn<'a> {
     pub request_id: &'a str, // default None
     pub cipher_code: &'a str,
     pub client: &'a Client,
-    pub iat: u64,
     pub auth_type: AuthType, // when sms/email, compare code; when google, github, apple, call oauth
     pub sign_mode: SignMode, // default Proof
 }
@@ -144,10 +140,10 @@ impl TeeAuth for TeeService {
             error!("encode client error, {}", err);
             Error::new(ErrorKind::DataError)
         })?;
-        const max_len: usize = 2048;
-        let mut account_b = [0_u8; max_len];
+        const MAX_LEN: usize = 2048;
+        let mut account_b = [0_u8; MAX_LEN];
         let mut account_b_size = 0;
-        let mut cipher_dauth = [0_u8; max_len];
+        let mut cipher_dauth = [0_u8; MAX_LEN];
         let mut cipher_dauth_size = 0;
         let mut sgx_result = sgx_status_t::SGX_SUCCESS;
         let mut error_code = 255;
@@ -157,7 +153,7 @@ impl TeeAuth for TeeService {
                 &mut sgx_result,
                 auth_req.as_ptr() as *const u8,
                 auth_req.len(),
-                max_len,
+                MAX_LEN,
                 account_b.as_ptr() as *mut u8,
                 &mut account_b_size,
                 cipher_dauth.as_ptr() as *mut u8,
