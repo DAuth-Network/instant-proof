@@ -33,6 +33,7 @@ pub struct OAuth {
     pub github: OAuthConf,
     pub google: OAuthConf,
     pub apple: OAuthConf,
+    pub twitter: OAuthConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -58,6 +59,7 @@ impl std::default::Default for TeeConfig {
                 github: OAuthConf::default(),
                 google: OAuthConf::default(),
                 apple: OAuthConf::default(),
+                twitter: OAuthConf::default(),
             },
             rsa_key: emp(),
             ecdsa_key: emp(),
@@ -117,6 +119,7 @@ fn test_oauth_creation() {
         github: OAuthConf::default(),
         google: OAuthConf::default(),
         apple: OAuthConf::default(),
+        twitter: OAuthConf::default(),
     };
     assert_eq!(oauth.github.client_id, "");
     assert_eq!(oauth.github.client_secret, "");

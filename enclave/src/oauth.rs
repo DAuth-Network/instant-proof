@@ -27,6 +27,7 @@ pub fn get_oauth_client(auth_type: AuthType) -> Option<&'static dyn OAuthClient>
         AuthType::Google => Some(&conf.google),
         AuthType::Github => Some(&conf.github),
         AuthType::Apple => Some(&conf.apple),
+        AuthType::Twitter => Some(&conf.twitter),
         _ => {
             error("invalid auth type");
             None
@@ -43,6 +44,10 @@ pub struct GithubOAuthClient {
 }
 
 pub struct AppleOAuthClient {
+    pub conf: OAuthConf,
+}
+
+pub struct TwitterOAuthClient {
     pub conf: OAuthConf,
 }
 
@@ -70,6 +75,15 @@ impl OAuthClient for AppleOAuthClient {
     }
     fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
         apple_oauth(&self.conf, code, redirect_url)
+    }
+}
+
+impl OAuthClient for TwitterOAuthClient {
+    fn new(conf: OAuthConf) -> Self {
+        Self { conf }
+    }
+    fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+        twitter_oauth(&self.conf, code, redirect_url)
     }
 }
 
@@ -269,21 +283,46 @@ pub struct AppleClientSecret<'a> {
     pub exp: u64,
 }
 
-/*
-pub fn twitter_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
+fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+    let (p1, p2) = match code.split_once(' ') {
+        Some((p1, p2)) => (p1, p2),
+        None => return Err(GenericError::from("github oauth failed")),
+    };
+    let token_req = format!(
+        "oauth_consumer_key={}&oauth_token={}&oauth_verifier={}",
+        conf.client_id, p1, p2
+    );
+    let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
+    let token_resp = http_req(
+        "https://api.twitter.com/oauth/access_token",
+        Method::POST,
+        Some(token_req),
+        token_headers,
+    );
+    let v: Value = serde_json::from_str(&token_resp?)?;
+    if v["oauth_token"].is_null() {
+        return Err(GenericError::from("github oauth failed"));
+    }
+    let token = v["oauth_token"].as_str().unwrap();
+    let token = v["access_token"].clone().to_string();
+    let bt = format!("Bearer {}", token);
+    let user_headers = HashMap::from([("Authorization", bt.as_str())]);
+    let account_resp = http_req(
+        "https://api.twitter.com/2/users/me",
+        Method::GET,
+        None,
+        user_headers,
+    );
+    let v2: Value = serde_json::from_str(&account_resp?)?;
+    if v2["id"].is_null() {
+        return Err(GenericError::from("google oauth failed"));
+    }
+    Ok(InnerAccount {
+        account: v2["id"].clone().to_string(),
+        auth_type: AuthType::Twitter,
+        id_type: IdType::Id,
+    })
 }
-
-
-pub fn discord_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
-}
-
-
-pub fn telegram_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
-}
-*/
 
 fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let token_req = format!(

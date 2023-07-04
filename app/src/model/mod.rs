@@ -26,6 +26,7 @@ pub enum AuthType {
     Github,
     Google,
     Apple,
+    Twitter,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -54,6 +55,7 @@ impl std::fmt::Display for AuthType {
             AuthType::Google => write!(f, "google"),
             AuthType::Github => write!(f, "github"),
             AuthType::Apple => write!(f, "apple"),
+            AuthType::Twitter => write!(f, "twitter"),
         }
     }
 }
@@ -79,6 +81,7 @@ impl FromStr for AuthType {
             "google" => Ok(AuthType::Google),
             "github" => Ok(AuthType::Github),
             "apple" => Ok(AuthType::Apple),
+            "twitter" => Ok(AuthType::Twitter),
             _ => Err(()),
         }
     }

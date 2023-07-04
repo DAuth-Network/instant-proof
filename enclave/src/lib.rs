@@ -74,6 +74,7 @@ struct EnclaveConfig {
     pub google: oauth::GoogleOAuthClient,
     pub github: oauth::GithubOAuthClient,
     pub apple: oauth::AppleOAuthClient,
+    pub twitter: oauth::TwitterOAuthClient,
 }
 
 // Rust doesn't support mutable statics, as it could lead to bugs in a multithreading setting
@@ -132,6 +133,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                     github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
                     google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
                     apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple.clone()),
+                    twitter: oauth::TwitterOAuthClient::new(tee_conf.oauth.apple.clone()),
                 },
             };
             // Store it to the static var, i.e. initialize it

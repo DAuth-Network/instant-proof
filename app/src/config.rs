@@ -57,6 +57,7 @@ pub struct OAuth {
     pub github: OAuthConf,
     pub google: OAuthConf,
     pub apple: OAuthConf,
+    pub twitter: OAuthConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

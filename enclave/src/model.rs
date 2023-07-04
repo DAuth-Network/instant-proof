@@ -60,6 +60,7 @@ pub enum AuthType {
     Github,
     Google,
     Apple,
+    Twitter,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -99,6 +100,7 @@ impl std::fmt::Display for AuthType {
             AuthType::Google => write!(f, "google"),
             AuthType::Github => write!(f, "github"),
             AuthType::Apple => write!(f, "apple"),
+            AuthType::Twitter => write!(f, "twitter"),
         }
     }
 }
