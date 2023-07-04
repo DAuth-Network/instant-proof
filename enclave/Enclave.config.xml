@@ -2,6 +2,10 @@
 <EnclaveConfiguration>
   <ProdID>0</ProdID>
   <ISVSVN>0</ISVSVN>
+  <!-- example
+    <StackMaxSize>0x2000000</StackMaxSize> 0.03G
+    <HeapMaxSize>0x80000000</HeapMaxSize> 2G
+  -->
   <StackMaxSize>0x40000</StackMaxSize>
   <HeapMaxSize>0x100000</HeapMaxSize>
   <TCSNum>14</TCSNum>
