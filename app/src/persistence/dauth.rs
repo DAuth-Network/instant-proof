@@ -22,7 +22,6 @@ pub fn insert_account(pool: &Pool, account: &Account) -> GenericResult<()> {
         (
             &account.acc_hash,
             &account.acc_seal,
-            &account.auth_type.to_string(),
             &account.id_type.to_string(),
         ),
     )?;
@@ -34,13 +33,12 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
     let mut result: Vec<Account> = Vec::new();
     let mut conn = pool.get_conn()?;
     let stmt = format!(
-        "select acc_hash, acc_seal, auth_type, id_type from account where acc_hash='{}' and auth_type='{}'",
+        "select acc_hash, acc_seal, id_type from account where acc_hash='{}' and id_type='{}'",
         account.acc_hash,
-        account.auth_type.to_string()
+        account.id_type.to_string()
     );
     conn.query_iter(stmt)?.for_each(|row| {
         let r: (
-            std::string::String,
             std::string::String,
             std::string::String,
             std::string::String,
@@ -48,8 +46,7 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
         result.push(Account {
             acc_hash: r.0,
             acc_seal: r.1,
-            auth_type: AuthType::from_str(&r.2).unwrap(),
-            id_type: IdType::from_str(&r.3).unwrap(),
+            id_type: IdType::from_str(&r.2).unwrap(),
         });
     });
     Ok(result)
@@ -60,11 +57,10 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
     let mut tx = conn.start_transaction(TxOpts::default())?;
     tx.exec_drop(
         "insert into auth (
-            acc_hash, auth_type, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
-        ) values (?, ?, ?, ?, ?, ?, ?, ?)",
+            acc_hash, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
+        ) values (?, ?, ?, ?, ?, ?, ?)",
         (
             hist.acc_hash,
-            hist.auth_type.to_string(),
             hist.id_type.to_string(),
             hist.auth_id,
             hist.audience,
@@ -82,9 +78,9 @@ pub fn query_latest_auth_id(pool: &Pool, account: &Account) -> i32 {
     let mut tx = conn.start_transaction(TxOpts::default()).unwrap();
     let count: Option<i32> = tx
         .query_first(format!(
-            "select count(*) from auth where acc_hash='{}' and auth_type='{}'",
+            "select count(*) from auth where acc_hash='{}' and id_type='{}'",
             account.acc_hash,
-            account.auth_type.to_string()
+            account.id_type.to_string()
         ))
         .unwrap();
     tx.commit().unwrap();

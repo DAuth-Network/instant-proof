@@ -1,7 +1,6 @@
 use super::config::OAuthConf;
 use super::err::*;
 use super::log::*;
-use crate::model::AuthType;
 use crate::os_utils::*;
 use crate::*;
 use http_req::{
@@ -21,13 +20,13 @@ use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
 
-pub fn get_oauth_client(auth_type: AuthType) -> Option<&'static dyn OAuthClient> {
+pub fn get_oauth_client(id_type: IdType) -> Option<&'static dyn OAuthClient> {
     let conf = &config(None).inner;
-    match auth_type {
-        AuthType::Google => Some(&conf.google),
-        AuthType::Github => Some(&conf.github),
-        AuthType::Apple => Some(&conf.apple),
-        AuthType::Twitter => Some(&conf.twitter),
+    match id_type {
+        IdType::Google => Some(&conf.google),
+        IdType::Github => Some(&conf.github),
+        IdType::Apple => Some(&conf.apple),
+        IdType::Twitter => Some(&conf.twitter),
         _ => {
             error("invalid auth type");
             None
@@ -118,8 +117,7 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     }
     Ok(InnerAccount {
         account: v2["email"].clone().to_string(),
-        auth_type: AuthType::Google,
-        id_type: IdType::Mailto,
+        id_type: IdType::Google,
     })
 }
 
@@ -146,8 +144,7 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     match extract_apple_token(token) {
         Some(r) => Ok(InnerAccount {
             account: r,
-            auth_type: AuthType::Apple,
-            id_type: IdType::Id,
+            id_type: IdType::Apple,
         }),
         None => Err(GenericError::from("google oauth failed")),
     }
@@ -319,8 +316,7 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
     }
     Ok(InnerAccount {
         account: v2["id"].clone().to_string(),
-        auth_type: AuthType::Twitter,
-        id_type: IdType::Id,
+        id_type: IdType::Twitter,
     })
 }
 
@@ -360,8 +356,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     }
     Ok(InnerAccount {
         account: v2["login"].clone().to_string(),
-        auth_type: AuthType::Github,
-        id_type: IdType::Id,
+        id_type: IdType::Github,
     })
 }
 

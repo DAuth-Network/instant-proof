@@ -132,7 +132,7 @@ pub struct AuthOtpReq {
     client_id: String,
     session_id: String,
     cipher_account: String,
-    account_type: AuthType,
+    id_type: IdType,
     request_id: Option<String>,
 }
 
@@ -160,7 +160,7 @@ pub async fn send_otp(
     let auth_otp_in = OtpIn {
         session_id: &req.session_id,
         cipher_account: &req.cipher_account,
-        auth_type: req.account_type,
+        id_type: req.id_type,
         client: &client,
     };
     match tee.send_otp(auth_otp_in) {
@@ -174,7 +174,7 @@ pub struct AuthInOneReq {
     client_id: String,
     session_id: String,
     cipher_code: String,
-    auth_type: AuthType,
+    id_type: IdType,
     request_id: Option<String>,
     sign_mode: Option<SignMode>, // default proof, or JWT
 }
@@ -213,7 +213,7 @@ pub async fn auth_in_one(
         cipher_code: &req.cipher_code,
         request_id,
         client: &client,
-        auth_type: req.auth_type,
+        id_type: req.id_type,
         sign_mode,
     };
     let auth_result = tee.auth_dauth(auth_in);

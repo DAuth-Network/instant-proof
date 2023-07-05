@@ -46,7 +46,7 @@ pub struct ExchangeKeyOut {
 pub struct OtpIn<'a> {
     pub session_id: &'a str,
     pub cipher_account: &'a str,
-    pub auth_type: AuthType,
+    pub id_type: IdType,
     pub client: &'a Client,
 }
 
@@ -57,7 +57,7 @@ pub struct AuthIn<'a> {
     pub request_id: &'a str, // default None
     pub cipher_code: &'a str,
     pub client: &'a Client,
-    pub auth_type: AuthType, // when sms/email, compare code; when google, github, apple, call oauth
+    pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
     pub sign_mode: SignMode, // default Proof
 }
 
