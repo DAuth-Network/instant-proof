@@ -283,8 +283,9 @@ pub struct AppleClientSecret<'a> {
 fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let token_req = format!(
         "code={}&grant_type=authorization_code&client_id={}&redirect_uri={}&code_verifier=challenge",
-        code, conf.client_id, redirect_url
+        code, conf.client_id, "https://demo-api.dauth.network/redirect/twitter"
     );
+    info(&token_req);
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
         "https://api.twitter.com/2/oauth2/token",
