@@ -201,8 +201,14 @@ pub async fn auth_in_one(
     let client = client_o.unwrap();
     let tee = &endex.tee;
     let request_id = match &req.request_id {
-        Some(r) => r,
-        None => "None",
+        Some(r) => {
+            if r.starts_with("0x") {
+                r[2..].to_string()
+            } else {
+                r.to_string()
+            }
+        }
+        None => "None".to_string(),
     };
     let sign_mode = match &req.sign_mode {
         Some(r) => r.to_owned(),
@@ -211,7 +217,7 @@ pub async fn auth_in_one(
     let auth_in = AuthIn {
         session_id: &req.session_id,
         cipher_code: &req.cipher_code,
-        request_id,
+        request_id: &request_id,
         client: &client,
         id_type: req.id_type,
         sign_mode,
@@ -227,7 +233,7 @@ pub async fn auth_in_one(
         error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(derr::Error::new(derr::ErrorKind::DbError));
     }
-    let auth = Auth::new(&account, &client.client_name, request_id);
+    let auth = Auth::new(&account, &client.client_name, &request_id);
     let insert_auth_r = insert_auth(&endex.db_pool, auth);
     if insert_auth_r.is_err() {
         error!("insert auth error {}", insert_auth_r.err().unwrap());

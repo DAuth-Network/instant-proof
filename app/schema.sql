@@ -22,7 +22,7 @@ create table auth (
     audience varchar(128), /* client_name*/
     auth_datetime datetime,
     auth_exp BIGINT,
-    request_id varchar(64),
+    request_id varchar(256),
     INDEX i_date using btree(auth_datetime),
     INDEX i_account using hash(acc_hash),
     PRIMARY KEY(id)

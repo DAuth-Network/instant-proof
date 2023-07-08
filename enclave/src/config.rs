@@ -22,7 +22,6 @@ pub struct OtpChannel {
 pub struct OAuthConf {
     pub client_id: String,
     pub client_secret: String,
-    pub redirect_url: String,
     pub kid: Option<String>,
     pub iss: Option<String>,
     pub sub: Option<String>,
@@ -75,7 +74,6 @@ impl OAuthConf {
         Self {
             client_id: emp(),
             client_secret: emp(),
-            redirect_url: emp(),
             iss: None,
             kid: None,
             sub: None,

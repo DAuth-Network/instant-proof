@@ -70,7 +70,6 @@ pub struct Db {
 pub struct OAuthConf {
     pub client_id: String,
     pub client_secret: String,
-    pub redirect_url: String,
     pub kid: Option<String>,
     pub iss: Option<String>,
     pub sub: Option<String>,
