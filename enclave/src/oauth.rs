@@ -298,10 +298,10 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
         token_headers,
     );
     let v: Value = serde_json::from_str(&token_resp?)?;
-    if v["oauth_token"].is_null() {
+    if v["access_token"].is_null() {
         return Err(GenericError::from("github oauth failed"));
     }
-    let token = v["oauth_token"].as_str().unwrap();
+    let token = v["access_token"].as_str().unwrap();
     info(&format!("token is {}", token));
     let bt = format!("Bearer {}", token);
     let user_headers = HashMap::from([("Authorization", bt.as_str())]);
