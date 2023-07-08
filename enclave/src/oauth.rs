@@ -281,17 +281,13 @@ pub struct AppleClientSecret<'a> {
 }
 
 fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
-    let (p1, p2) = match code.split_once(' ') {
-        Some((p1, p2)) => (p1, p2),
-        None => return Err(GenericError::from("github oauth failed")),
-    };
     let token_req = format!(
-        "oauth_consumer_key={}&oauth_token={}&oauth_verifier={}",
-        conf.client_id, p1, p2
+        "code={}&grant_type=authorization_code&client_id={}&redirect_uri={}&code_verifier=challenge",
+        code, conf.client_id, redirect_url
     );
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
-        "https://api.twitter.com/oauth/access_token",
+        "https://api.twitter.com/2/oauth2/token",
         Method::POST,
         Some(token_req),
         token_headers,
