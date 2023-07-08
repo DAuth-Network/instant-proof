@@ -127,13 +127,13 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
             let singleton = ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
-                    mail: otp::MailChannelClient::new(tee_conf.otp.email),
-                    mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api),
-                    sms: otp::SmsChannelClient::new(tee_conf.otp.sms),
-                    github: oauth::GithubOAuthClient::new(tee_conf.oauth.github),
-                    google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google),
-                    apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple),
-                    twitter: oauth::TwitterOAuthClient::new(tee_conf.oauth.twitter),
+                    mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
+                    mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
+                    sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
+                    github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
+                    google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
+                    apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple.clone()),
+                    twitter: oauth::TwitterOAuthClient::new(tee_conf.oauth.twitter.clone()),
                 },
             };
             // Store it to the static var, i.e. initialize it
