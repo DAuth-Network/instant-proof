@@ -297,7 +297,7 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
         return Err(GenericError::from("github oauth failed"));
     }
     let token = v["oauth_token"].as_str().unwrap();
-    let token = v["access_token"].clone().to_string();
+    info(&format!("token is {}", token));
     let bt = format!("Bearer {}", token);
     let user_headers = HashMap::from([("Authorization", bt.as_str())]);
     let account_resp = http_req(
@@ -310,8 +310,10 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
     if v2["id"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
+    let twitter_id = v2["id"].as_str().unwrap();
+    info(twitter_id);
     Ok(InnerAccount {
-        account: v2["id"].clone().to_string(),
+        account: twitter_id.to_string(),
         id_type: IdType::Twitter,
     })
 }
