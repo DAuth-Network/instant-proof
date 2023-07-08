@@ -312,10 +312,10 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
         user_headers,
     );
     let v2: Value = serde_json::from_str(&account_resp?)?;
-    if v2["id"].is_null() {
+    if v2["data"]["id"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
-    let twitter_id = v2["id"].as_str().unwrap();
+    let twitter_id = v2["data"]["id"].as_str().unwrap();
     info(twitter_id);
     Ok(InnerAccount {
         account: twitter_id.to_string(),
