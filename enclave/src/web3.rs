@@ -23,11 +23,13 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
             eth_hash(request_id.as_bytes())
         }
     };
-    let msg_b = abi_combine(&id_type_hash, &account_hash, &request_id_hash);
-    info(&format!("signing msg is {:?}", &msg_b));
-    let msg_sha = eth_hash(&msg_b);
-    info(&format!("signing hash is {:?}", &msg_sha));
-    let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
+    let abi_encoded = abi_combine(&id_type_hash, &account_hash, &request_id_hash);
+    info(&format!("abi encode is {:?}", &abi_encoded));
+    let abi_hash = eth_hash(&abi_encoded);
+    info(&format!("abi hash is {:?}", &abi_hash));
+    let msg_to_sign = eth_message_b(&abi_hash);
+    info(&format!("msg to sign is {:?}", &msg_to_sign));
+    let message = libsecp256k1::Message::parse_slice(&msg_to_sign).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
     let last_byte = r_id.serialize() + 27;
     let mut sig_buffer: Vec<u8> = Vec::with_capacity(65);
@@ -108,6 +110,18 @@ fn gen_auth_bytes(
     let auth_hex = encode_hex(auth_hash);
     let msg = format!("{}.{}.{}.{}", sgx_hex, auth_hex, auth_id, exp);
     eth_message(&msg)
+}
+
+fn eth_message_b(message: &[u8; 32]) -> [u8; 32] {
+    let msg_prefix = "\x19Ethereum Signed Message:\n32".as_bytes();
+    let mut msg_buffer = Vec::with_capacity(3 * 32);
+    msg_buffer.extend_from_slice(msg_prefix);
+    msg_buffer.extend_from_slice(message);
+    let mut hasher = Keccak::v256();
+    let mut output = [0_u8; 32];
+    hasher.update(&msg_buffer);
+    hasher.finalize(&mut output);
+    output
 }
 
 fn eth_message(message: &str) -> [u8; 32] {
