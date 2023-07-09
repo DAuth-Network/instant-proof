@@ -77,13 +77,13 @@ fn init_enclave_and_set_conf(conf: config::TeeConfig) -> SgxEnclave {
     let config_b = serde_json::to_vec(&conf).unwrap();
     let config_b_size = config_b.len();
     let result = unsafe {
-        ecall::ec_test(enclave.geteid(), &mut sgx_result);
         ecall::ec_set_conf(
             enclave.geteid(),
             &mut sgx_result,
             config_b.as_ptr() as *const u8,
             config_b_size,
         )
+        // ecall::ec_test(enclave.geteid(), &mut sgx_result)
     };
     match result {
         sgx_status_t::SGX_SUCCESS => {

@@ -52,10 +52,7 @@ pub fn eth_hash(b: &[u8]) -> [u8; 32] {
 }
 
 fn abi_combine(id_abi: &[u8; 32], account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
-    let mut abi_all = Vec::with_capacity(9 * 32);
-    abi_all.extend_from_slice(&pad_length(3 * 32 as u16));
-    abi_all.extend_from_slice(&pad_length(5 * 32 as u16));
-    abi_all.extend_from_slice(&pad_length(7 * 32 as u16));
+    let mut abi_all = Vec::with_capacity(3 * 32);
     abi_all.extend_from_slice(id_abi);
     abi_all.extend_from_slice(account_abi);
     abi_all.extend_from_slice(request_id_abi);
