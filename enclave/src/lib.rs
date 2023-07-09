@@ -426,6 +426,7 @@ pub extern "C" fn ec_auth_in_one(
                 &auth.auth_in.request_id,
                 get_config_edcsa_key(),
             );
+            info(&format!("signature is {:?}", signature_b));
             dauth_signed = EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes();
         }
         _ => {

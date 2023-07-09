@@ -26,6 +26,7 @@ pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: Strin
     let msg_b = abi_combine(&id_type_hash, &account_hash, &request_id_hash);
     info(&format!("signing msg is {:?}", &msg_b));
     let msg_sha = eth_hash(&msg_b);
+    info(&format!("signing hash is {:?}", &msg_sha));
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
     let last_byte = r_id.serialize() + 27;
