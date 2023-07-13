@@ -1,7 +1,6 @@
 use super::config::OAuthConf;
 use super::err::*;
 use super::log::*;
-use crate::model::AuthType;
 use crate::os_utils::*;
 use crate::*;
 use http_req::{
@@ -21,12 +20,13 @@ use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
 
-pub fn get_oauth_client(auth_type: AuthType) -> Option<&'static dyn OAuthClient> {
+pub fn get_oauth_client(id_type: IdType) -> Option<&'static dyn OAuthClient> {
     let conf = &config(None).inner;
-    match auth_type {
-        AuthType::Google => Some(&conf.google),
-        AuthType::Github => Some(&conf.github),
-        AuthType::Apple => Some(&conf.apple),
+    match id_type {
+        IdType::Google => Some(&conf.google),
+        IdType::Github => Some(&conf.github),
+        IdType::Apple => Some(&conf.apple),
+        IdType::Twitter => Some(&conf.twitter),
         _ => {
             error("invalid auth type");
             None
@@ -43,6 +43,10 @@ pub struct GithubOAuthClient {
 }
 
 pub struct AppleOAuthClient {
+    pub conf: OAuthConf,
+}
+
+pub struct TwitterOAuthClient {
     pub conf: OAuthConf,
 }
 
@@ -70,6 +74,15 @@ impl OAuthClient for AppleOAuthClient {
     }
     fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
         apple_oauth(&self.conf, code, redirect_url)
+    }
+}
+
+impl OAuthClient for TwitterOAuthClient {
+    fn new(conf: OAuthConf) -> Self {
+        Self { conf }
+    }
+    fn oauth(&self, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+        twitter_oauth(&self.conf, code, redirect_url)
     }
 }
 
@@ -104,8 +117,7 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     }
     Ok(InnerAccount {
         account: v2["email"].clone().to_string(),
-        auth_type: AuthType::Google,
-        id_type: IdType::Mailto,
+        id_type: IdType::Google,
     })
 }
 
@@ -132,8 +144,7 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     match extract_apple_token(token) {
         Some(r) => Ok(InnerAccount {
             account: r,
-            auth_type: AuthType::Apple,
-            id_type: IdType::Id,
+            id_type: IdType::Apple,
         }),
         None => Err(GenericError::from("google oauth failed")),
     }
@@ -269,21 +280,50 @@ pub struct AppleClientSecret<'a> {
     pub exp: u64,
 }
 
-/*
-pub fn twitter_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
+fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
+    let token_req = format!(
+        "code={}&grant_type=authorization_code&redirect_uri={}&code_verifier=challenge",
+        code, "https://demo-api.dauth.network/redirect/twitter"
+    );
+    info(&token_req);
+    let auth_header = format!("Basic {}", conf.client_secret);
+    let token_headers = HashMap::from([
+        ("Content-Type", "application/x-www-form-urlencoded"),
+        ("Authorization", &auth_header),
+    ]);
+    let token_resp = http_req(
+        "https://api.twitter.com/2/oauth2/token",
+        Method::POST,
+        Some(token_req),
+        token_headers,
+    );
+    let v: Value = serde_json::from_str(&token_resp?)?;
+    if v["access_token"].is_null() || !v["error"].is_null() {
+        error("twitter oauth access_token failed");
+        return Err(GenericError::from("twitter oauth failed"));
+    }
+    let token = v["access_token"].as_str().unwrap();
+    info(&format!("token is {}", token));
+    let bt = format!("Bearer {}", token);
+    let user_headers = HashMap::from([("Authorization", bt.as_str())]);
+    let account_resp = http_req(
+        "https://api.twitter.com/2/users/me",
+        Method::GET,
+        None,
+        user_headers,
+    );
+    let v2: Value = serde_json::from_str(&account_resp?)?;
+    if v2["data"]["id"].is_null() || !v2["error"].is_null() {
+        error("twittero oauth profile failed");
+        return Err(GenericError::from("twitter oauth failed"));
+    }
+    let twitter_id = v2["data"]["id"].as_str().unwrap();
+    info(twitter_id);
+    Ok(InnerAccount {
+        account: twitter_id.to_string(),
+        id_type: IdType::Twitter,
+    })
 }
-
-
-pub fn discord_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
-}
-
-
-pub fn telegram_oauth(conf: &Config, code: &str) -> GenericResult<String>{
-    Ok("".to_string())
-}
-*/
 
 fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let token_req = format!(
@@ -321,8 +361,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     }
     Ok(InnerAccount {
         account: v2["login"].clone().to_string(),
-        auth_type: AuthType::Github,
-        id_type: IdType::Id,
+        id_type: IdType::Github,
     })
 }
 

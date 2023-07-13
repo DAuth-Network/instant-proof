@@ -74,6 +74,7 @@ struct EnclaveConfig {
     pub google: oauth::GoogleOAuthClient,
     pub github: oauth::GithubOAuthClient,
     pub apple: oauth::AppleOAuthClient,
+    pub twitter: oauth::TwitterOAuthClient,
 }
 
 // Rust doesn't support mutable statics, as it could lead to bugs in a multithreading setting
@@ -132,6 +133,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                     github: oauth::GithubOAuthClient::new(tee_conf.oauth.github.clone()),
                     google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
                     apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple.clone()),
+                    twitter: oauth::TwitterOAuthClient::new(tee_conf.oauth.twitter.clone()),
                 },
             };
             // Store it to the static var, i.e. initialize it
@@ -233,7 +235,7 @@ pub extern "C" fn ec_send_otp(
     let otp = sgx_utils::rand();
     //TODO: sendmail error
     // get otp_client and send mail
-    let otp_client_o = otp::get_otp_client(req.auth_type);
+    let otp_client_o = otp::get_otp_client(req.id_type);
     if otp_client_o.is_none() {
         unsafe {
             *error_code = Error::new(ErrorKind::SendChannelError).to_int();
@@ -254,8 +256,7 @@ pub extern "C" fn ec_send_otp(
     session.code = otp.to_string();
     let inner_account = InnerAccount {
         account: account.to_string(),
-        auth_type: req.auth_type,
-        id_type: IdType::from_auth_type(req.auth_type),
+        id_type: req.id_type,
     };
     session.data = inner_account;
     update_session(&req.session_id, &session);
@@ -346,8 +347,8 @@ pub extern "C" fn ec_auth_in_one(
     let code = code_r.unwrap();
     info(&format!("auth code is {}", &code));
     // get account from author
-    let result: Result<InnerAccount, Error> = match req.auth_type {
-        AuthType::Email | AuthType::Sms => {
+    let result: Result<InnerAccount, Error> = match req.id_type {
+        IdType::Mailto | IdType::Tel => {
             // when auth_type None, compare otp code, if match, return account in session
             if !code.eq(&session.code) {
                 info("confirm code not match, returning");
@@ -358,7 +359,7 @@ pub extern "C" fn ec_auth_in_one(
         }
         _ => {
             // when auth_type not none, call oauth, return oauth account or error
-            let oauth_client_o = oauth::get_oauth_client(req.auth_type);
+            let oauth_client_o = oauth::get_oauth_client(req.id_type);
             if oauth_client_o.is_none() {
                 Err(Error::new(ErrorKind::DataError))
             } else {
@@ -395,7 +396,6 @@ pub extern "C" fn ec_auth_in_one(
     info(&format!("account seal {:?}", sealed));
     info(&format!("account hash {:?}", raw_hashed));
     let out_account = Account {
-        auth_type: account.auth_type,
         id_type: account.id_type,
         acc_seal: os_utils::encode_hex(&sealed),
         acc_hash: account_hash.clone(),
@@ -426,6 +426,7 @@ pub extern "C" fn ec_auth_in_one(
                 &auth.auth_in.request_id,
                 get_config_edcsa_key(),
             );
+            info(&format!("signature is {:?}", &signature_b));
             dauth_signed = EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes();
         }
         _ => {

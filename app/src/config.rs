@@ -57,6 +57,7 @@ pub struct OAuth {
     pub github: OAuthConf,
     pub google: OAuthConf,
     pub apple: OAuthConf,
+    pub twitter: OAuthConf,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -69,7 +70,6 @@ pub struct Db {
 pub struct OAuthConf {
     pub client_id: String,
     pub client_secret: String,
-    pub redirect_url: String,
     pub kid: Option<String>,
     pub iss: Option<String>,
     pub sub: Option<String>,

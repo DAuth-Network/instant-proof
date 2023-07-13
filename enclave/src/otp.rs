@@ -18,12 +18,12 @@ use std::string::String;
 use std::string::ToString;
 use std::vec::Vec;
 
-pub fn get_otp_client(auth_type: AuthType) -> Option<&'static dyn OtpChannelClient> {
+pub fn get_otp_client(id_type: IdType) -> Option<&'static dyn OtpChannelClient> {
     let conf = &config(None).inner;
-    match auth_type {
+    match id_type {
         // AuthType::Email => Some(&conf.otp.mail), smtp only supports text/plain
-        AuthType::Email => Some(&conf.mail_api),
-        AuthType::Sms => Some(&conf.sms),
+        IdType::Mailto => Some(&conf.mail_api),
+        IdType::Tel => Some(&conf.sms),
         _ => {
             error("invalid auth type");
             None

@@ -20,8 +20,8 @@ pub trait ToJsonBytes {
 pub struct OtpIn {
     pub session_id: String,
     pub cipher_account: String,
-    pub auth_type: AuthType,
     pub client: Client,
+    pub id_type: IdType,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct AuthIn {
     pub request_id: String, // default None
     pub cipher_code: String,
     pub client: Client,
-    pub auth_type: AuthType, // default None, when None, compare with otp otherwise, call oauth
+    pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
     pub sign_mode: SignMode, // default Proof
 }
 
@@ -54,31 +54,13 @@ pub enum SignMode {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AuthType {
-    Email,
-    Sms,
-    Github,
-    Google,
-    Apple,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
 pub enum IdType {
     Mailto,
     Tel,
-    Id,
-}
-
-impl IdType {
-    pub fn from_auth_type(auth_type: AuthType) -> Self {
-        match auth_type {
-            AuthType::Email => IdType::Mailto,
-            AuthType::Sms => IdType::Tel,
-            AuthType::Google => IdType::Mailto,
-            _ => IdType::Id,
-        }
-    }
+    Google,
+    Apple,
+    Github,
+    Twitter,
 }
 
 impl std::fmt::Display for IdType {
@@ -86,19 +68,10 @@ impl std::fmt::Display for IdType {
         match self {
             IdType::Mailto => write!(f, "mailto"),
             IdType::Tel => write!(f, "tel"),
-            IdType::Id => write!(f, "id"),
-        }
-    }
-}
-
-impl std::fmt::Display for AuthType {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            AuthType::Email => write!(f, "email"),
-            AuthType::Sms => write!(f, "sms"),
-            AuthType::Google => write!(f, "google"),
-            AuthType::Github => write!(f, "github"),
-            AuthType::Apple => write!(f, "apple"),
+            IdType::Apple => write!(f, "apple"),
+            IdType::Github => write!(f, "github"),
+            IdType::Google => write!(f, "google"),
+            IdType::Twitter => write!(f, "twitter"),
         }
     }
 }
@@ -107,7 +80,6 @@ impl std::fmt::Display for AuthType {
 pub struct Account {
     pub acc_hash: String,
     pub acc_seal: String,
-    pub auth_type: AuthType,
     pub id_type: IdType,
 }
 
@@ -138,14 +110,6 @@ pub struct JwtClaims {
 }
 
 impl<'a> InnerAuth<'a> {
-    pub fn to_eth_string(&self) -> String {
-        format!(
-            "{}:{}:{}",
-            &self.account.auth_type.to_string(),
-            &self.account.account,
-            &self.auth_in.request_id
-        )
-    }
     pub fn to_eth_auth(&self) -> EthAuth {
         EthAuth {
             account: self.account.account.clone(),
@@ -191,7 +155,6 @@ impl EthSigned {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InnerAccount {
     pub account: String,
-    pub auth_type: AuthType,
     pub id_type: IdType,
 }
 
@@ -199,7 +162,6 @@ impl InnerAccount {
     pub fn default() -> Self {
         Self {
             account: "".to_string(),
-            auth_type: AuthType::Email,
             id_type: IdType::Mailto,
         }
     }
