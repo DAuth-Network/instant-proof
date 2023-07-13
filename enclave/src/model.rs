@@ -43,6 +43,7 @@ pub struct AuthIn {
     pub client: Client,
     pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
     pub sign_mode: SignMode, // default Proof
+    pub hidden: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

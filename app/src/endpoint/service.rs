@@ -177,6 +177,7 @@ pub struct AuthInOneReq {
     id_type: IdType,
     request_id: Option<String>,
     sign_mode: Option<SignMode>, // default proof, or JWT
+    hidden: Option<bool>,
 }
 
 #[post("/auth_in_one")]
@@ -221,6 +222,7 @@ pub async fn auth_in_one(
         client: &client,
         id_type: req.id_type,
         sign_mode,
+        hidden: &req.hidden,
     };
     let auth_result = tee.auth_dauth(auth_in);
     if auth_result.is_err() {

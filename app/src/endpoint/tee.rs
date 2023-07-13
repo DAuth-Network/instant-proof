@@ -59,6 +59,7 @@ pub struct AuthIn<'a> {
     pub client: &'a Client,
     pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
     pub sign_mode: SignMode, // default Proof
+    pub hidden: &'a Option<bool>,
 }
 
 /// Exchange Key Request includes a user public key for secure channel
