@@ -1,1 +1,4 @@
-
+- code structure
+  - /app includes functions: web api and databaes persistence
+  - /enclave includes functions: build secure session, send sms otp, send email opt, invoke google oauth, etc.
+  - /scripts includes functions: generate random client id, set up binary structure

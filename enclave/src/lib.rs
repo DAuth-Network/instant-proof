@@ -254,10 +254,7 @@ pub extern "C" fn ec_send_otp(
     }
     // update session
     session.code = otp.to_string();
-    let inner_account = InnerAccount {
-        account: account.to_string(),
-        id_type: req.id_type,
-    };
+    let inner_account = InnerAccount::build(account, req.id_type);
     session.data = inner_account;
     update_session(&req.session_id, &session);
     unsafe {
@@ -308,25 +305,27 @@ pub extern "C" fn ec_auth_in_one(
 ) -> sgx_status_t {
     // get request
     let req_slice = unsafe { slice::from_raw_parts(auth_req, auth_req_size) };
-    let req_r = serde_json::from_slice(req_slice);
-    if req_r.is_err() {
-        error("invalid auth type");
-        unsafe {
-            *error_code = Error::new(ErrorKind::DataError).to_int();
+    let req = match serde_json::from_slice(req_slice) {
+        Ok(v) => v,
+        Err(e) => {
+            error("invalid auth_in req bytes");
+            unsafe {
+                *error_code = Error::new(ErrorKind::DataError).to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
         }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    let req: AuthIn = req_r.unwrap();
+    };
     // get session
-    let session_r = get_session(&req.session_id);
-    if session_r.is_none() {
-        error(&format!("sgx session {:?} not found.", &req.session_id));
-        unsafe {
-            *error_code = Error::new(ErrorKind::SessionError).to_int();
+    let mut session = match get_session(&req.session_id) {
+        Some(v) => v,
+        None => {
+            error(&format!("sgx session {:?} not found.", &req.session_id));
+            unsafe {
+                *error_code = Error::new(ErrorKind::SessionError).to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
         }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    let mut session = session_r.unwrap();
+    };
     if session.expire() {
         error(&format!("sgx session {:?} expired.", &req.session_id));
         unsafe {
@@ -349,7 +348,6 @@ pub extern "C" fn ec_auth_in_one(
     // get account from author
     let result: Result<InnerAccount, Error> = match req.id_type {
         IdType::Mailto | IdType::Tel => {
-            // when auth_type None, compare otp code, if match, return account in session
             if !code.eq(&session.code) {
                 info("confirm code not match, returning");
                 Err(Error::new(ErrorKind::OtpCodeError))
@@ -358,7 +356,6 @@ pub extern "C" fn ec_auth_in_one(
             }
         }
         _ => {
-            // when auth_type not none, call oauth, return oauth account or error
             let oauth_client_o = oauth::get_oauth_client(req.id_type);
             if oauth_client_o.is_none() {
                 Err(Error::new(ErrorKind::DataError))
@@ -373,35 +370,29 @@ pub extern "C" fn ec_auth_in_one(
             }
         }
     };
-    if result.is_err() {
-        error("auth failed");
-        unsafe {
-            *error_code = result.err().unwrap().to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    let mut account = result.unwrap();
-    // when success, seal the account
-    info(&format!("account is {:?}", &account));
-    let sealed_r = sgx_utils::i_seal(account.account.as_bytes(), &get_config_seal_key());
-    let sealed = match sealed_r {
+    let account = match result {
         Ok(r) => r,
-        Err(_) => {
-            error("seal account failed");
-            return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+        Err(e) => {
+            error(&format!("auth failed {:?}", e));
+            unsafe {
+                *error_code = e.to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
         }
     };
-    let raw_hashed = web3::eth_hash(account.account.as_bytes());
-    let account_hash = os_utils::encode_hex(&raw_hashed);
-    info(&format!("account seal {:?}", sealed));
-    info(&format!("account hash {:?}", raw_hashed));
-    let out_account = Account {
-        id_type: account.id_type,
-        acc_seal: os_utils::encode_hex(&sealed),
-        acc_hash: account_hash.clone(),
-    };
-    // update account to account_hash
-    account.account = account_hash;
+    match account.seal_and_hash(&get_config_seal_key()) {
+        Ok(()) => {}
+        Err(e) => {
+            error(&format!("seal and hash failed {:?}", e));
+            unsafe {
+                *error_code = e.to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
+        }
+    }
+    // when success, seal the account
+    info(&format!("account seal {:?}", account.account_seal.unwrap()));
+    info(&format!("account hash {:?}", account.account_hash.unwrap()));
     // sign the auth
     let auth = InnerAuth {
         account: &account,
@@ -422,7 +413,7 @@ pub extern "C" fn ec_auth_in_one(
             info("signing proof");
             let signature_b = web3::eth_sign_abi(
                 &auth.account.id_type.to_string(),
-                &auth.account.account,
+                &auth.account.account_hash,
                 &auth.auth_in.request_id,
                 get_config_edcsa_key(),
             );
@@ -441,7 +432,7 @@ pub extern "C" fn ec_auth_in_one(
     let cipher_dauth_b = session.encrypt(&dauth_signed);
     info(&format!("cipher dauth is {:?}", &cipher_dauth_b));
     // return
-    let account_sgx = out_account.to_json_bytes();
+    let account_sgx = account.to_json_bytes();
     if account_sgx.len() > max_len as usize {
         error("account too long");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
