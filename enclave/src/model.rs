@@ -87,22 +87,22 @@ pub struct InnerAuth<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EthAuth {
-    pub account: String,
+pub struct EthAuth<'a> {
+    pub account: &'a String,
     pub id_type: IdType,
-    pub request_id: String,
-    pub account_plain: Option<String>,
+    pub request_id: &'a String,
+    pub account_plain: &'a Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct JwtClaims {
-    alg: String,
-    sub: String,
-    iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+pub struct JwtClaims<'a> {
+    alg: &'static String,
+    sub: &'a String,
+    iss: &'a String,
+    aud: &'static String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
     iat: u64,
     exp: u64,
-    uid: String,
+    uid: &'a String,
 }
 
 impl<'a> InnerAuth<'a> {
@@ -111,37 +111,37 @@ impl<'a> InnerAuth<'a> {
             Some(true) => &EthAuth {
                 account: self.account.account_hash,
                 id_type: self.account.id_type,
-                request_id: self.auth_in.request_id,
-                account_plain: Some(self.account.account),
+                request_id: &self.auth_in.request_id,
+                account_plain: &Some(self.account.account),
             },
             _ => &EthAuth {
                 account: self.account.account_hash,
                 id_type: self.account.id_type,
-                request_id: self.auth_in.request_id,
-                account_plain: None,
+                request_id: &self.auth_in.request_id,
+                account_plain: &None,
             },
         }
     }
-    pub fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+    pub fn to_jwt_claim(&self, issuer: &'b str) -> &JwtClaims {
         let iat = os_utils::system_time();
         match self.auth_in.account_plain {
-            Some(true) => JwtClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+            Some(true) => &JwtClaims {
+                alg: "RS256",
+                sub: issuer,
+                iss: issuer,
+                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
                 iat,
                 exp: iat + 3600,
-                uid: self.account.account.clone(),    
+                uid: &self.account.account,
             },
-            _ => JwtClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+            _ => &JwtClaims {
+                alg: "RS256",
+                sub: issuer,
+                iss: issuer,
+                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
                 iat,
                 exp: iat + 3600,
-                uid: self.account.account_hash.clone(),    
+                uid: &self.account.account_hash,
             },
         }
     }
