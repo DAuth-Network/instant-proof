@@ -1,8 +1,11 @@
 extern crate serde;
 use crate::os_utils;
 
+use super::err;
+use super::log::*;
 use super::os_utils::*;
 use super::sgx_utils::*;
+use super::web3;
 use serde::{Deserialize, Serialize};
 use std::fmt::*;
 use std::string::*;
@@ -78,7 +81,7 @@ impl std::fmt::Display for IdType {
     }
 }
 
-impl ToJsonBytes for Account {}
+impl ToJsonBytes for InnerAccount {}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct InnerAuth<'a> {
@@ -122,7 +125,7 @@ impl<'a> InnerAuth<'a> {
             },
         }
     }
-    pub fn to_jwt_claim(&self, issuer: &'b str) -> &JwtClaims {
+    pub fn to_jwt_claim(&self, issuer: &str) -> &JwtClaims {
         let iat = os_utils::system_time();
         match self.auth_in.account_plain {
             Some(true) => &JwtClaims {
@@ -148,9 +151,9 @@ impl<'a> InnerAuth<'a> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EthSigned {
-    pub auth: EthAuth,
-    pub signature: String,
+pub struct EthSigned<'a> {
+    pub auth: &'a EthAuth<'a>,
+    pub signature: &'a String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,8 +161,8 @@ pub struct JwtSigned {
     pub token: String,
 }
 
-impl ToJsonBytes for EthSigned {}
-impl EthSigned {
+impl ToJsonBytes for EthSigned<'_> {}
+impl EthSigned<'_> {
     pub fn new(dauth: EthAuth, signed: &[u8]) -> Self {
         Self {
             auth: dauth,
@@ -186,14 +189,14 @@ impl InnerAccount {
             account_seal: None,
         }
     }
-    pub fn seal_and_hash(&self, seal_key: &str) -> Result<(), Error> {
+    pub fn seal_and_hash(&self, seal_key: &str) -> Result<(), err::Error> {
         info(&format!("account is {:?}", &self.account));
         let sealed_r = i_seal(self.account.as_bytes(), seal_key);
         let sealed = match sealed_r {
             Ok(r) => r,
             Err(_) => {
                 error("seal account failed");
-                return Error::new(ErrorKind::SgxError);
+                return err::Error::new(err::ErrorKind::SgxError);
             }
         };
         self.account_seal = Some(encode_hex(&sealed));
