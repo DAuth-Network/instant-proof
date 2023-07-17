@@ -305,7 +305,7 @@ pub extern "C" fn ec_auth_in_one(
 ) -> sgx_status_t {
     // get request
     let req_slice = unsafe { slice::from_raw_parts(auth_req, auth_req_size) };
-    let req = match serde_json::from_slice(req_slice) {
+    let req: AuthIn = match serde_json::from_slice(req_slice) {
         Ok(v) => v,
         Err(e) => {
             error("invalid auth_in req bytes");
@@ -413,7 +413,7 @@ pub extern "C" fn ec_auth_in_one(
             info("signing proof");
             let signature_b = web3::eth_sign_abi(
                 &auth.account.id_type.to_string(),
-                &auth.account.account_hash,
+                &auth.account.account_hash.unwrap(),
                 &auth.auth_in.request_id,
                 get_config_edcsa_key(),
             );

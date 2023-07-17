@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::*;
 use std::string::*;
 use std::vec::*;
+use std::io::Result;
 
 pub trait ToJsonBytes {
     fn to_json_bytes(&self) -> Vec<u8>
@@ -89,7 +90,7 @@ pub struct InnerAuth<'a> {
     pub auth_in: &'a AuthIn,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EthAuth<'a> {
     pub account: &'a String,
     pub id_type: IdType,
@@ -97,28 +98,28 @@ pub struct EthAuth<'a> {
     pub account_plain: &'a Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct JwtClaims<'a> {
-    alg: &'static String,
-    sub: &'a String,
-    iss: &'a String,
-    aud: &'static String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    alg: &'static str,
+    sub: &'a str,
+    iss: &'a str,
+    aud: &'static str, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
     iat: u64,
     exp: u64,
-    uid: &'a String,
+    uid: &'a str,
 }
 
 impl<'a> InnerAuth<'a> {
     pub fn to_eth_auth(&self) -> &'a EthAuth {
         match self.auth_in.account_plain {
             Some(true) => &EthAuth {
-                account: self.account.account_hash,
+                account: &self.account.account_hash.unwrap(),
                 id_type: self.account.id_type,
                 request_id: &self.auth_in.request_id,
                 account_plain: &Some(self.account.account),
             },
             _ => &EthAuth {
-                account: self.account.account_hash,
+                account: &self.account.account_hash.unwrap(),
                 id_type: self.account.id_type,
                 request_id: &self.auth_in.request_id,
                 account_plain: &None,
@@ -144,26 +145,26 @@ impl<'a> InnerAuth<'a> {
                 aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit",
                 iat,
                 exp: iat + 3600,
-                uid: &self.account.account_hash,
+                uid: &self.account.account_hash.unwrap(),
             },
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EthSigned<'a> {
     pub auth: &'a EthAuth<'a>,
-    pub signature: &'a String,
+    pub signature: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct JwtSigned {
     pub token: String,
 }
 
 impl ToJsonBytes for EthSigned<'_> {}
 impl EthSigned<'_> {
-    pub fn new(dauth: EthAuth, signed: &[u8]) -> Self {
+    pub fn new(dauth: &EthAuth, signed: &[u8]) -> Self {
         Self {
             auth: dauth,
             signature: encode_hex(&signed),
@@ -181,6 +182,15 @@ pub struct InnerAccount {
 }
 
 impl InnerAccount {
+    pub fn default() -> Self {
+        Self {
+             account: "".to_string(),
+             id_type: IdType::Mailto,
+             account_hash: None,
+             account_seal: None,
+        }
+    }
+
     pub fn build(account: String, id_type: IdType) -> Self {
         Self {
             account: account,
@@ -189,7 +199,7 @@ impl InnerAccount {
             account_seal: None,
         }
     }
-    pub fn seal_and_hash(&self, seal_key: &str) -> Result<(), err::Error> {
+    pub fn seal_and_hash(&self, seal_key: &str) -> Result<()> {
         info(&format!("account is {:?}", &self.account));
         let sealed_r = i_seal(self.account.as_bytes(), seal_key);
         let sealed = match sealed_r {

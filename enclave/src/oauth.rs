@@ -115,10 +115,7 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     if v2["email"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
-    Ok(InnerAccount {
-        account: v2["email"].clone().to_string(),
-        id_type: IdType::Google,
-    })
+    Ok(InnerAccount::build(v2["email"].clone().to_string(), IdType::Google))
 }
 
 fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
@@ -142,10 +139,7 @@ fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResul
     let token = v["id_token"].as_str().unwrap();
     info(&format!("apple id_token {}", token));
     match extract_apple_token(token) {
-        Some(r) => Ok(InnerAccount {
-            account: r,
-            id_type: IdType::Apple,
-        }),
+        Some(r) => Ok(InnerAccount::build(r, IdType::Apple)),
         None => Err(GenericError::from("google oauth failed")),
     }
 }
@@ -319,10 +313,7 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
     }
     let twitter_id = v2["data"]["id"].as_str().unwrap();
     info(twitter_id);
-    Ok(InnerAccount {
-        account: twitter_id.to_string(),
-        id_type: IdType::Twitter,
-    })
+    Ok(InnerAccount::build(twitter_id.to_string(), IdType::Twitter))
 }
 
 fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
@@ -359,10 +350,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     if v2["id"].is_null() {
         return Err(GenericError::from("github oauth failed"));
     }
-    Ok(InnerAccount {
-        account: v2["login"].clone().to_string(),
-        id_type: IdType::Github,
-    })
+    Ok(InnerAccount::build(v2["login"].clone().to_string(),IdType::Github))
 }
 
 pub fn http_req(
