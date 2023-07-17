@@ -113,13 +113,13 @@ impl<'a> InnerAuth<'a> {
     pub fn to_eth_auth(&self) -> EthAuth {
         match self.auth_in.account_plain {
             Some(true) => EthAuth {
-                account: self.account.account_hash.as_ref().unwrap().to_string(),
+                account: self.account.acc_hash.as_ref().unwrap().to_string(),
                 id_type: self.account.id_type,
                 request_id: self.auth_in.request_id.clone(),
                 account_plain: Some(self.account.account.to_string()),
             },
             _ => EthAuth {
-                account: self.account.account_hash.as_ref().unwrap().to_string(),
+                account: self.account.acc_hash.as_ref().unwrap().to_string(),
                 id_type: self.account.id_type,
                 request_id: self.auth_in.request_id.clone(),
                 account_plain: None,
@@ -145,7 +145,7 @@ impl<'a> InnerAuth<'a> {
                 aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
                 iat,
                 exp: iat + 3600,
-                uid: self.account.account_hash.as_ref().unwrap().to_string(),
+                uid: self.account.acc_hash.as_ref().unwrap().to_string(),
             },
         }
     }
@@ -177,8 +177,8 @@ pub struct InnerAccount {
     #[serde(skip_serializing)]
     pub account: String,
     pub id_type: IdType,
-    pub account_hash: Option<String>,
-    pub account_seal: Option<String>,
+    pub acc_hash: Option<String>,
+    pub acc_seal: Option<String>,
 }
 
 impl InnerAccount {
@@ -186,8 +186,8 @@ impl InnerAccount {
         Self {
             account: "".to_string(),
             id_type: IdType::Mailto,
-            account_hash: None,
-            account_seal: None,
+            acc_hash: None,
+            acc_seal: None,
         }
     }
 
@@ -195,8 +195,8 @@ impl InnerAccount {
         Self {
             account: account,
             id_type: id_type,
-            account_hash: None,
-            account_seal: None,
+            acc_hash: None,
+            acc_seal: None,
         }
     }
     pub fn seal_and_hash(&mut self, seal_key: &str) -> Result<(), err::Error> {
@@ -209,9 +209,9 @@ impl InnerAccount {
                 return Err(err::Error::new(err::ErrorKind::SgxError));
             }
         };
-        self.account_seal = Some(encode_hex(&sealed));
+        self.acc_seal = Some(encode_hex(&sealed));
         let raw_hashed = web3::eth_hash(self.account.as_bytes());
-        self.account_hash = Some(encode_hex(&raw_hashed));
+        self.acc_hash = Some(encode_hex(&raw_hashed));
         Ok(())
     }
 }

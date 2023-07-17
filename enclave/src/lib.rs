@@ -411,7 +411,7 @@ pub extern "C" fn ec_auth_in_one(
             info("signing proof");
             let signature_b = web3::eth_sign_abi(
                 &auth.account.id_type.to_string(),
-                &auth.account.account_hash.as_ref().unwrap().to_string(),
+                &auth.account.acc_hash.as_ref().unwrap().to_string(),
                 &auth.auth_in.request_id,
                 get_config_edcsa_key(),
             );
