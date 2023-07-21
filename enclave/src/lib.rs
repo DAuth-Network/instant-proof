@@ -416,8 +416,8 @@ pub extern "C" fn ec_auth_in_one(
         account: &account,
         auth_in: &req,
     };
-    let mut dauth_signed = vec![];
     let signer = signer::get_signer(&req.sign_mode);
+    let dauth_signed = signer.sign(&auth).unwrap();
     info(&format!("dauth is {:?}", &dauth_signed));
     let cipher_dauth_b = session.encrypt(&dauth_signed);
     info(&format!("cipher dauth is {:?}", &cipher_dauth_b));

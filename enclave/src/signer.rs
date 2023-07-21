@@ -12,13 +12,13 @@ use std::string::*;
 use std::vec::Vec;
 use tiny_keccak::*;
 
-pub fn get_signer(sign_mode: &SignMode) -> Option<&'static dyn SignerAgent> {
+pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     let conf = &config(None).inner;
     match sign_mode {
-        SignMode::Jwt => Some(&conf.jwt),
-        SignMode::JwtFb => Some(&conf.jwt_fb),
-        SignMode::Proof => Some(&conf.proof),
-        _ => Some(&conf.both_signer),
+        SignMode::Jwt => &conf.jwt,
+        SignMode::JwtFb => &conf.jwt_fb,
+        SignMode::Proof => &conf.proof,
+        _ => &conf.both_signer,
     }
 }
 
