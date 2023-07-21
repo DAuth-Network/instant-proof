@@ -47,16 +47,15 @@ pub mod os_utils;
 pub mod otp;
 pub mod session;
 pub mod sgx_utils;
-pub mod web3;
+pub mod signer;
 use self::err::*;
 use self::log::*;
 use self::model::*;
 use self::session::*;
-use jsonwebtoken::{
-    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
-};
+
 use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
+use signer::SignerAgent;
 
 // EnclaveState includes session state that constatntly changes
 struct EnclaveState {
@@ -68,6 +67,10 @@ struct EnclaveState {
 // EnclaveConfig includes config set once and never changes
 struct EnclaveConfig {
     pub config: TeeConfig,
+    pub jwt: signer::JwtSignerAgent,
+    pub jwt_fb: signer::JwtFbSignerAgent,
+    pub proof: signer::ProofSignerAgent,
+    pub both_signer: signer::BothSignerAgent,
     pub mail: otp::MailChannelClient,
     pub mail_api: otp::MailApiChannelClient,
     pub sms: otp::SmsChannelClient,
@@ -134,6 +137,23 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                     google: oauth::GoogleOAuthClient::new(tee_conf.oauth.google.clone()),
                     apple: oauth::AppleOAuthClient::new(tee_conf.oauth.apple.clone()),
                     twitter: oauth::TwitterOAuthClient::new(tee_conf.oauth.twitter.clone()),
+                    jwt: signer::JwtSignerAgent {
+                        conf: tee_conf.signer.jwt.clone(),
+                    },
+                    jwt_fb: signer::JwtFbSignerAgent {
+                        conf: tee_conf.signer.jwt_fb.clone(),
+                    },
+                    proof: signer::ProofSignerAgent {
+                        conf: tee_conf.signer.proof.clone(),
+                    },
+                    both_signer: signer::BothSignerAgent {
+                        jwt: signer::JwtSignerAgent {
+                            conf: tee_conf.signer.jwt.clone(),
+                        },
+                        proof: signer::ProofSignerAgent {
+                            conf: tee_conf.signer.proof.clone(),
+                        },
+                    },
                 },
             };
             // Store it to the static var, i.e. initialize it
@@ -397,35 +417,7 @@ pub extern "C" fn ec_auth_in_one(
         auth_in: &req,
     };
     let mut dauth_signed = vec![];
-    match req.sign_mode {
-        SignMode::Jwt => {
-            info("signing jwt");
-            let claim = auth.to_jwt_claim(&get_issuer());
-            let pem_key = get_config_rsa_key();
-            let pem_key_b = pem_key.as_bytes();
-            let key = EncodingKey::from_rsa_pem(pem_key_b).unwrap();
-            let token = encode(&Header::new(Algorithm::RS256), &claim, &key).unwrap();
-            dauth_signed = token.as_bytes().to_vec();
-        }
-        SignMode::Proof => {
-            info("signing proof");
-            let signature_b = web3::eth_sign_abi(
-                &auth.account.id_type.to_string(),
-                &auth.account.acc_hash.as_ref().unwrap().to_string(),
-                &auth.auth_in.request_id,
-                get_config_edcsa_key(),
-            );
-            info(&format!("signature is {:?}", &signature_b));
-            dauth_signed = EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes();
-        }
-        _ => {
-            error("invalid sign mode");
-            unsafe {
-                *error_code = Error::new(ErrorKind::DataError).to_int();
-            }
-            return sgx_status_t::SGX_SUCCESS;
-        }
-    }
+    let signer = signer::get_signer(&req.sign_mode);
     info(&format!("dauth is {:?}", &dauth_signed));
     let cipher_dauth_b = session.encrypt(&dauth_signed);
     info(&format!("cipher dauth is {:?}", &cipher_dauth_b));
@@ -457,11 +449,6 @@ fn get_config_seal_key() -> String {
     conf.config.seal_key.clone()
 }
 
-fn get_config_edcsa_key() -> String {
-    let conf = &config(None).inner;
-    conf.config.ecdsa_key.clone()
-}
-
 fn get_pub_k_k1() -> [u8; 65] {
     let enclave_state = state().inner.lock().unwrap();
     enclave_state.pub_k_k1
@@ -470,16 +457,6 @@ fn get_pub_k_k1() -> [u8; 65] {
 fn get_prv_k() -> sgx_ec256_private_t {
     let enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.prv_k
-}
-
-fn get_issuer() -> String {
-    let conf = &config(None).inner;
-    conf.config.jwt_issuer.clone()
-}
-
-fn get_config_rsa_key() -> String {
-    let conf = &config(None).inner;
-    conf.config.rsa_key.clone()
 }
 
 //TODO: get sign pub key automatically

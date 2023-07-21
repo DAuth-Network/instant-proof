@@ -5,7 +5,7 @@ use super::err;
 use super::log::*;
 use super::os_utils::*;
 use super::sgx_utils::*;
-use super::web3;
+use super::signer;
 use serde::{Deserialize, Serialize};
 use std::fmt::*;
 use std::result::Result;
@@ -56,6 +56,8 @@ pub struct AuthIn {
 pub enum SignMode {
     Jwt,
     Proof,
+    JwtFb,
+    Both,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -90,23 +92,12 @@ pub struct InnerAuth<'a> {
     pub auth_in: &'a AuthIn,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EthAuth {
     pub account: String,
     pub id_type: IdType,
     pub request_id: String,
     pub account_plain: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct JwtClaims {
-    alg: String,
-    sub: String,
-    iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
-    iat: u64,
-    exp: u64,
-    uid: String,
 }
 
 impl<'a> InnerAuth<'a> {
@@ -126,10 +117,10 @@ impl<'a> InnerAuth<'a> {
             },
         }
     }
-    pub fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+    pub fn to_jwt_fb_claim(&self, issuer: &str) -> JwtFbClaims {
         let iat = os_utils::system_time();
         match self.auth_in.account_plain {
-            Some(true) => JwtClaims {
+            Some(true) => JwtFbClaims {
                 alg: "RS256".to_string(),
                 sub: issuer.to_string(),
                 iss: issuer.to_string(),
@@ -138,7 +129,7 @@ impl<'a> InnerAuth<'a> {
                 exp: iat + 3600,
                 uid: self.account.account.to_string(),
             },
-            _ => JwtClaims {
+            _ => JwtFbClaims {
                 alg: "RS256".to_string(),
                 sub: issuer.to_string(),
                 iss: issuer.to_string(),
@@ -149,9 +140,54 @@ impl<'a> InnerAuth<'a> {
             },
         }
     }
+    pub fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+        let iat = os_utils::system_time();
+        match self.auth_in.account_plain {
+            Some(true) => JwtClaims {
+                alg: "RS256".to_string(),
+                sub: self.account.account.to_string(),
+                idtype: self.account.id_type.to_string(),
+                iss: issuer.to_string(),
+                aud: self.auth_in.client.client_id.clone(),
+                iat,
+                exp: iat + 3600,
+            },
+            _ => JwtClaims {
+                alg: "RS256".to_string(),
+                sub: self.account.acc_hash.as_ref().unwrap().to_string(),
+                idtype: self.account.id_type.to_string(),
+                iss: issuer.to_string(),
+                aud: self.auth_in.client.client_id.clone(),
+                iat,
+                exp: iat + 3600,
+            },
+        }
+    }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Serialize)]
+pub struct JwtFbClaims {
+    alg: String,
+    sub: String,
+    iss: String,
+    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    iat: u64,
+    exp: u64,
+    uid: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct JwtClaims {
+    alg: String,
+    sub: String,
+    idtype: String,
+    iss: String,
+    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    iat: u64,
+    exp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EthSigned {
     pub auth: EthAuth,
     pub signature: String,
@@ -210,7 +246,7 @@ impl InnerAccount {
             }
         };
         self.acc_seal = Some(encode_hex(&sealed));
-        let raw_hashed = web3::eth_hash(self.account.as_bytes());
+        let raw_hashed = signer::eth_hash(self.account.as_bytes());
         self.acc_hash = Some(encode_hex(&raw_hashed));
         Ok(())
     }

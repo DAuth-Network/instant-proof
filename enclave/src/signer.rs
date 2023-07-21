@@ -1,13 +1,105 @@
+use super::config;
 use super::err::*;
 use super::log::*;
+use super::model::*;
 use super::os_utils::*;
+use jsonwebtoken::{
+    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::string::*;
 use std::vec::Vec;
 use tiny_keccak::*;
 
-pub fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: String) -> Vec<u8> {
-    let prv_k_b = decode_hex(&prv_k).unwrap();
+pub fn get_signer(sign_mode: &SignMode) -> Option<&'static dyn SignerAgent> {
+    let conf = &config(None).inner;
+    match sign_mode {
+        SignMode::Jwt => Some(&conf.jwt),
+        SignMode::JwtFb => Some(&conf.jwt_fb),
+        SignMode::Proof => Some(&conf.proof),
+        _ => Some(&conf.both_signer),
+    }
+}
+
+pub trait SignerAgent {
+    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>>;
+}
+
+pub struct JwtSignerAgent {
+    pub conf: config::SignerConf,
+}
+
+pub struct JwtFbSignerAgent {
+    pub conf: config::SignerConf,
+}
+
+pub struct ProofSignerAgent {
+    pub conf: config::SignerConf,
+}
+
+pub struct BothSignerAgent {
+    pub jwt: JwtSignerAgent,
+    pub proof: ProofSignerAgent,
+}
+
+impl SignerAgent for JwtSignerAgent {
+    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+        let claim = auth.to_jwt_claim(&self.conf.signer);
+        let pem_key = self.conf.signing_key.as_bytes();
+        let key = EncodingKey::from_rsa_pem(pem_key)?;
+        let token = encode(&Header::new(Algorithm::RS256), &claim, &key)?;
+        Ok(token.as_bytes().to_vec())
+    }
+}
+
+impl SignerAgent for JwtFbSignerAgent {
+    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+        let claim = auth.to_jwt_fb_claim(&self.conf.signer);
+        let pem_key = self.conf.signing_key.as_bytes();
+        let key = EncodingKey::from_rsa_pem(pem_key)?;
+        let token = encode(&Header::new(Algorithm::RS256), &claim, &key)?;
+        Ok(token.as_bytes().to_vec())
+    }
+}
+
+impl SignerAgent for ProofSignerAgent {
+    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+        let signature_b = eth_sign_abi(
+            &auth.account.id_type.to_string(),
+            &auth.account.acc_hash.as_ref().unwrap().to_string(),
+            &auth.auth_in.request_id,
+            &self.conf.signing_key,
+        );
+        info(&format!("signature is {:?}", &signature_b));
+        Ok(EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes())
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct BothSignature {
+    jwt: String,
+    proof: EthSigned,
+}
+
+impl ToJsonBytes for BothSignature {}
+
+impl SignerAgent for BothSignerAgent {
+    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+        let jwt = self.jwt.sign(&auth)?;
+        let proof = self.proof.sign(&auth)?;
+        let jwt_token = std::str::from_utf8(&jwt)?;
+        let proof_obj: EthSigned = serde_json::from_slice(&proof)?;
+        Ok(BothSignature {
+            jwt: jwt_token.to_string(),
+            proof: proof_obj,
+        }
+        .to_json_bytes())
+    }
+}
+
+fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
+    let prv_k_b = decode_hex(prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
     info(&format!(
         "sign raw parts: {} {} {}",
@@ -87,7 +179,7 @@ fn pad_length(l: u16) -> Vec<u8> {
     padded
 }
 
-pub fn eth_sign_str(msg: &str, prv_k: String) -> Vec<u8> {
+fn eth_sign_str(msg: &str, prv_k: String) -> Vec<u8> {
     let msg_sha = eth_message(msg);
     let prv_k_b = decode_hex(&prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();

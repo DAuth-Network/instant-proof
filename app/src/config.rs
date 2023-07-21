@@ -76,36 +76,42 @@ pub struct OAuthConf {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SignerConf {
+    pub signer: String,
+    pub signing_key: String, // set dummy in config file, read from env later
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Signer {
+    pub jwt: SignerConf,
+    pub jwt_fb: SignerConf,
+    pub proof: SignerConf,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DauthConfig {
     pub api: Api,
     pub db: Db,
     pub otp: OtpChannel,
     pub oauth: OAuth,
-    pub proof_issuer: String,
-    pub jwt_issuer: String,
+    pub signer: Signer,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
     pub otp: OtpChannel,
     pub oauth: OAuth,
-    pub rsa_key: String,
-    pub ecdsa_key: String,
     pub seal_key: String,
-    pub proof_issuer: String,
-    pub jwt_issuer: String,
+    pub signer: Signer,
 }
 
 impl DauthConfig {
-    pub fn to_tee_config(&self, rsa_key: String, ecdsa_key: String, seal_key: String) -> TeeConfig {
+    pub fn to_tee_config(&self, seal_key: String) -> TeeConfig {
         TeeConfig {
             otp: self.otp.clone(),
             oauth: self.oauth.clone(),
-            rsa_key: rsa_key,
-            ecdsa_key: ecdsa_key,
-            seal_key: seal_key,
-            proof_issuer: self.proof_issuer.clone(),
-            jwt_issuer: self.jwt_issuer.clone(),
+            signer: self.signer.clone(),
+            seal_key,
         }
     }
 }

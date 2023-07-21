@@ -115,7 +115,10 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     if v2["email"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
-    Ok(InnerAccount::build(v2["email"].clone().to_string(), IdType::Google))
+    Ok(InnerAccount::build(
+        v2["email"].clone().to_string(),
+        IdType::Google,
+    ))
 }
 
 fn apple_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
@@ -350,7 +353,10 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     if v2["id"].is_null() {
         return Err(GenericError::from("github oauth failed"));
     }
-    Ok(InnerAccount::build(v2["login"].clone().to_string(),IdType::Github))
+    Ok(InnerAccount::build(
+        v2["login"].clone().to_string(),
+        IdType::Github,
+    ))
 }
 
 pub fn http_req(

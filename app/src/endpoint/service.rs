@@ -10,8 +10,6 @@ use serde_derive::{Deserialize, Serialize};
 extern crate sgx_types;
 extern crate sgx_urts;
 use crate::config::*;
-use crate::ecall;
-use crate::endpoint::utils;
 use crate::error as derr;
 use crate::model::*;
 use crate::persistence::dauth::*;

@@ -140,12 +140,16 @@ fn init_db_pool(conf: &config::DbConfig) -> Pool {
 
 /// Read config file and save config to hash map
 fn load_conf(fname: &str) -> config::DauthConfig {
-    Config::builder()
+    let mut conf = Config::builder()
         .add_source(File::with_name(fname))
         .build()
         .unwrap()
         .try_deserialize::<config::DauthConfig>()
-        .unwrap()
+        .unwrap();
+    conf.signer.jwt.signing_key = env::var("JWT_KEY").unwrap();
+    conf.signer.jwt_fb.signing_key = env::var("JWT_FB_KEY").unwrap();
+    conf.signer.proof.signing_key = env::var("PROOF_KEY").unwrap();
+    conf
 }
 
 /// This is the entrance of the web app server.
@@ -162,15 +166,11 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
-    let enclave = init_enclave_and_set_conf(conf.to_tee_config(
-        env::var("RSA_KEY").unwrap(),
-        env::var("ECDSA_KEY").unwrap(),
-        env::var("SEAL_KEY").unwrap(),
-    ));
+    let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
     let rsa_pub_key = parse_jwk(env::var("RSA_PUB_KEY").unwrap());
     let edata: web::Data<AppState> = web::Data::new(AppState {
         tee: TeeService::new(enclave, pool),
-        rsa_pub_key: rsa_pub_key,
+        rsa_pub_key,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_clients(&client_db).unwrap(),
         env: conf.api.env.clone(),

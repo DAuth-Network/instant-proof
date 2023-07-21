@@ -36,14 +36,24 @@ pub struct OAuth {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SignerConf {
+    pub signer: String,
+    pub signing_key: String, // set dummy in config file, read from env later
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Signer {
+    pub jwt: SignerConf,
+    pub jwt_fb: SignerConf,
+    pub proof: SignerConf,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
     pub otp: OtpChannel,
     pub oauth: OAuth,
-    pub rsa_key: String,
-    pub ecdsa_key: String,
+    pub signer: Signer,
     pub seal_key: String,
-    pub proof_issuer: String,
-    pub jwt_issuer: String,
 }
 
 impl std::default::Default for TeeConfig {
@@ -60,11 +70,12 @@ impl std::default::Default for TeeConfig {
                 apple: OAuthConf::default(),
                 twitter: OAuthConf::default(),
             },
-            rsa_key: emp(),
-            ecdsa_key: emp(),
             seal_key: emp(),
-            proof_issuer: emp(),
-            jwt_issuer: emp(),
+            signer: Signer {
+                jwt: SignerConf::default(),
+                jwt_fb: SignerConf::default(),
+                proof: SignerConf::default(),
+            },
         }
     }
 }
@@ -77,6 +88,15 @@ impl OAuthConf {
             iss: None,
             kid: None,
             sub: None,
+        }
+    }
+}
+
+impl SignerConf {
+    fn default() -> Self {
+        Self {
+            signer: emp(),
+            signing_key: emp(),
         }
     }
 }
@@ -101,14 +121,12 @@ fn test_oauth_client_creation() {
     let oauth_client = OAuthConf {
         client_id: "client_id".to_string(),
         client_secret: "client_secret".to_string(),
-        redirect_url: "redirect_url".to_string(),
         iss: None,
         kid: None,
         sub: None,
     };
     assert_eq!(oauth_client.client_id, "client_id");
     assert_eq!(oauth_client.client_secret, "client_secret");
-    assert_eq!(oauth_client.redirect_url, "redirect_url");
 }
 
 #[test]
@@ -121,5 +139,4 @@ fn test_oauth_creation() {
     };
     assert_eq!(oauth.github.client_id, "");
     assert_eq!(oauth.github.client_secret, "");
-    assert_eq!(oauth.github.redirect_url, "");
 }

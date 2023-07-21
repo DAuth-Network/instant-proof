@@ -15,6 +15,8 @@ pub struct Account {
 pub enum SignMode {
     Jwt,
     Proof,
+    JwtFb,
+    Both,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
