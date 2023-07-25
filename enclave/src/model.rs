@@ -97,6 +97,7 @@ pub struct EthAuth {
     pub account: String,
     pub id_type: IdType,
     pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub account_plain: Option<String>,
 }
 
