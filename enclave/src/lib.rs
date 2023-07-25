@@ -223,6 +223,7 @@ pub extern "C" fn ec_send_otp(
     info("sgx send otp");
     let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
     let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
+
     // verify session
     let session_r = get_session(&req.session_id);
     if session_r.is_none() {
@@ -449,16 +450,6 @@ fn get_config_seal_key() -> String {
     conf.config.seal_key.clone()
 }
 
-fn get_pub_k_k1() -> [u8; 65] {
-    let enclave_state = state().inner.lock().unwrap();
-    enclave_state.pub_k_k1
-}
-
-fn get_prv_k() -> sgx_ec256_private_t {
-    let enclave_state = state().inner.lock().unwrap();
-    enclave_state.sessions.prv_k
-}
-
 //TODO: get sign pub key automatically
 #[no_mangle]
 pub extern "C" fn ec_get_sign_pub_key(
@@ -475,15 +466,6 @@ fn ec_close_session(session_id: &String) -> sgx_status_t {
     let mut enclave_state = state().inner.lock().unwrap();
     enclave_state.sessions.close_session(session_id);
     sgx_status_t::SGX_SUCCESS
-}
-
-pub fn keccak256(bytes: &[u8]) -> [u8; 32] {
-    use tiny_keccak::{Hasher, Keccak};
-    let mut output = [0u8; 32];
-    let mut hasher = Keccak::v256();
-    hasher.update(bytes);
-    hasher.finalize(&mut output);
-    output
 }
 
 fn get_session(session_id: &str) -> Option<Session> {

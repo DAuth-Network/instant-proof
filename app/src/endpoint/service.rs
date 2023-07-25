@@ -254,17 +254,15 @@ pub struct JwksResp {
     keys: Vec<RSAPublicKey>,
 }
 
-/*
 #[get("/jwks.json")]
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("get rsa pub key");
     let pub_key = endex.rsa_pub_key.clone();
     json_resp(JwksResp {
-        keys: vec![pub_key]
+        keys: vec![pub_key],
     })
 }
-*/
 
 fn get_client(
     clients: &Vec<Client>,

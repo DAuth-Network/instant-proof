@@ -199,7 +199,7 @@ async fn main() -> std::io::Result<()> {
                     .service(exchange_key)
                     .service(send_otp)
                     .service(auth_in_one)
-                    // .service(jwks)
+                    .service(jwks)
                     .service(health),
             );
         // load index.html for testing only when env is dev
