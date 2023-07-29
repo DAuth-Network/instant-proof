@@ -222,7 +222,7 @@ pub async fn auth_in_one(
         sign_mode,
         account_plain: &req.account_plain,
     };
-    let auth_result = tee.auth_dauth(auth_in);
+    let auth_result = tee.auth_in_one(auth_in);
     if auth_result.is_err() {
         return fail_resp(auth_result.err().unwrap());
     }

@@ -38,6 +38,7 @@ use std::sync::{Once, SgxMutex};
 // use std::prelude::v1::*;
 use std::ptr;
 use std::str;
+pub mod auth;
 pub mod config;
 pub mod err;
 pub mod log;
@@ -48,11 +49,11 @@ pub mod otp;
 pub mod session;
 pub mod sgx_utils;
 pub mod signer;
+use self::auth::*;
 use self::err::*;
 use self::log::*;
 use self::model::*;
 use self::session::*;
-
 use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
 use signer::SignerAgent;
@@ -67,6 +68,7 @@ struct EnclaveState {
 // EnclaveConfig includes config set once and never changes
 struct EnclaveConfig {
     pub config: TeeConfig,
+    pub dauth: AuthService,
     pub jwt: signer::JwtSignerAgent,
     pub jwt_fb: signer::JwtFbSignerAgent,
     pub proof: signer::ProofSignerAgent,
@@ -130,6 +132,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
             let singleton = ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
+                    dauth: AuthService {},
                     mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
                     mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
                     sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
@@ -223,61 +226,13 @@ pub extern "C" fn ec_send_otp(
     info("sgx send otp");
     let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
     let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
-
-    // verify session
-    let session_r = get_session(&req.session_id);
-    if session_r.is_none() {
-        error(&format!("sgx session {:?} not found.", &req.session_id));
+    let result = config(None).inner.dauth.send_otp(&req);
+    if result.is_err() {
         unsafe {
-            *error_code = Error::new(ErrorKind::SessionError).to_int();
+            *error_code = result.err().unwrap().to_int();
         }
         return sgx_status_t::SGX_SUCCESS;
     }
-    let mut session = session_r.unwrap();
-    if session.expire() {
-        error(&format!("sgx session {:?} expired.", &req.session_id));
-        unsafe {
-            *error_code = Error::new(ErrorKind::SessionError).to_int();
-        }
-        ec_close_session(&req.session_id);
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    // decrypt account
-    let account_r = decrypt_text_to_text(&req.cipher_account, &session);
-    if account_r.is_err() {
-        error(&format!("decrypt opt account failed."));
-        unsafe {
-            *error_code = Error::new(ErrorKind::DataError).to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    let account = account_r.unwrap();
-    info(&format!("otp account is {}", account));
-    let otp = sgx_utils::rand();
-    //TODO: sendmail error
-    // get otp_client and send mail
-    let otp_client_o = otp::get_otp_client(req.id_type);
-    if otp_client_o.is_none() {
-        unsafe {
-            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    // send otp
-    let otp_client = otp_client_o.unwrap();
-    let otp_r = otp_client.send_otp(&account, &req.client, &otp.to_string());
-    if otp_r.is_err() {
-        error("send otp failed");
-        unsafe {
-            *error_code = Error::new(ErrorKind::SendChannelError).to_int();
-        }
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    // update session
-    session.code = otp.to_string();
-    let inner_account = InnerAccount::build(account, req.id_type);
-    session.data = inner_account;
-    update_session(&req.session_id, &session);
     unsafe {
         *error_code = 255;
     }
@@ -318,10 +273,10 @@ pub extern "C" fn ec_auth_in_one(
     auth_req: *const u8,
     auth_req_size: usize,
     max_len: u32,
-    account_b: *mut u8,
-    account_b_size: *mut u32,
-    cipher_dauth: *mut u8,
-    cipher_dauth_size: *mut u32,
+    account_o: *mut u8,
+    account_o_size: *mut u32,
+    cipher_dauth_o: *mut u8,
+    cipher_dauth_o_size: *mut u32,
     error_code: &mut u8,
 ) -> sgx_status_t {
     // get request
@@ -336,95 +291,16 @@ pub extern "C" fn ec_auth_in_one(
             return sgx_status_t::SGX_SUCCESS;
         }
     };
-    // get session
-    let mut session = match get_session(&req.session_id) {
-        Some(v) => v,
-        None => {
-            error(&format!("sgx session {:?} not found.", &req.session_id));
-            unsafe {
-                *error_code = Error::new(ErrorKind::SessionError).to_int();
-            }
-            return sgx_status_t::SGX_SUCCESS;
-        }
-    };
-    if session.expire() {
-        error(&format!("sgx session {:?} expired.", &req.session_id));
+    let result = config(None).inner.dauth.auth_in_one(&req);
+    if result.is_err() {
         unsafe {
-            *error_code = Error::new(ErrorKind::SessionError).to_int();
-        }
-        ec_close_session(&req.session_id);
-        return sgx_status_t::SGX_SUCCESS;
-    }
-    // decrypt code
-    let code_r = decrypt_text_to_text(&req.cipher_code, &session);
-    if code_r.is_err() {
-        error(&format!("decrypt code failed."));
-        unsafe {
-            *error_code = Error::new(ErrorKind::DataError).to_int();
+            *error_code = result.err().unwrap().to_int();
         }
         return sgx_status_t::SGX_SUCCESS;
     }
-    let code = code_r.unwrap();
-    info(&format!("auth code is {}", &code));
-    // get account from author
-    let result: Result<InnerAccount, Error> = match req.id_type {
-        IdType::Mailto | IdType::Tel => {
-            if !code.eq(&session.code) {
-                info("confirm code not match, returning");
-                Err(Error::new(ErrorKind::OtpCodeError))
-            } else {
-                Ok(session.data.clone())
-            }
-        }
-        _ => {
-            let oauth_client_o = oauth::get_oauth_client(req.id_type);
-            if oauth_client_o.is_none() {
-                Err(Error::new(ErrorKind::DataError))
-            } else {
-                let oauth_client = oauth_client_o.unwrap();
-                let oauth_r = oauth_client.oauth(&code, &req.client.client_redirect_url);
-                if oauth_r.is_err() {
-                    Err(Error::new(ErrorKind::OAuthCodeError))
-                } else {
-                    Ok(oauth_r.unwrap())
-                }
-            }
-        }
-    };
-    let mut account = match result {
-        Ok(r) => r,
-        Err(e) => {
-            error(&format!("auth failed {:?}", e));
-            unsafe {
-                *error_code = e.to_int();
-            }
-            return sgx_status_t::SGX_SUCCESS;
-        }
-    };
-    match account.seal_and_hash(&get_config_seal_key()) {
-        Ok(()) => {}
-        Err(e) => {
-            error(&format!("seal and hash failed {:?}", e));
-            unsafe {
-                *error_code = e.to_int();
-            }
-            return sgx_status_t::SGX_SUCCESS;
-        }
-    }
-    // when success, seal the account
-    // sign the auth
-    let auth = InnerAuth {
-        account: &account,
-        auth_in: &req,
-    };
-    let signer = signer::get_signer(&req.sign_mode);
-    let dauth_signed = signer.sign(&auth).unwrap();
-    info(&format!("dauth is {:?}", &dauth_signed));
-    let cipher_dauth_b = session.encrypt(&dauth_signed);
-    info(&format!("cipher dauth is {:?}", &cipher_dauth_b));
-    // return
-    let account_sgx = account.to_json_bytes();
-    if account_sgx.len() > max_len as usize {
+    let (account, cipher_dauth_b) = result.unwrap();
+    let account_b = account.to_json_bytes();
+    if account_b.len() > max_len as usize {
         error("account too long");
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
@@ -433,12 +309,15 @@ pub extern "C" fn ec_auth_in_one(
         return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
     }
     unsafe {
-        ptr::copy_nonoverlapping(account_sgx.as_ptr(), account_b, account_sgx.len());
-        *account_b_size = account_sgx.len().try_into().unwrap();
-        ptr::copy_nonoverlapping(cipher_dauth_b.as_ptr(), cipher_dauth, cipher_dauth_b.len());
-        *cipher_dauth_size = cipher_dauth_b.len().try_into().unwrap();
+        ptr::copy_nonoverlapping(account_b.as_ptr(), account_o, account_b.len());
+        *account_o_size = account_b.len().try_into().unwrap();
+        ptr::copy_nonoverlapping(
+            cipher_dauth_b.as_ptr(),
+            cipher_dauth_o,
+            cipher_dauth_b.len(),
+        );
+        *cipher_dauth_o_size = cipher_dauth_b.len().try_into().unwrap();
     }
-    ec_close_session(&req.session_id);
     unsafe {
         *error_code = 255;
     }

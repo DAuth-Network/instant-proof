@@ -22,14 +22,6 @@ pub trait ToJsonBytes {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtpIn {
-    pub session_id: String,
-    pub cipher_account: String,
-    pub client: Client,
-    pub id_type: IdType,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Client {
     pub client_name: String,
     pub client_id: String,
@@ -38,17 +30,6 @@ pub struct Client {
     pub mail_subject: Option<String>,
     pub mail_text_template: Option<String>,
     pub mail_html_template: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AuthIn {
-    pub session_id: String,
-    pub request_id: String, // default None
-    pub cipher_code: String,
-    pub client: Client,
-    pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
-    pub sign_mode: SignMode, // default Proof
-    pub account_plain: Option<bool>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -86,135 +67,13 @@ impl std::fmt::Display for IdType {
 
 impl ToJsonBytes for InnerAccount {}
 
-#[derive(Debug, Clone, Serialize)]
-pub struct InnerAuth<'a> {
-    pub account: &'a InnerAccount,
-    pub auth_in: &'a AuthIn,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct EthAuth {
-    pub account: String,
-    pub id_type: IdType,
-    pub request_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_plain: Option<String>,
-}
-
-impl<'a> InnerAuth<'a> {
-    pub fn to_eth_auth(&self) -> EthAuth {
-        match self.auth_in.account_plain {
-            Some(true) => EthAuth {
-                account: self.account.acc_hash.as_ref().unwrap().to_string(),
-                id_type: self.account.id_type,
-                request_id: self.auth_in.request_id.clone(),
-                account_plain: Some(self.account.account.to_string()),
-            },
-            _ => EthAuth {
-                account: self.account.acc_hash.as_ref().unwrap().to_string(),
-                id_type: self.account.id_type,
-                request_id: self.auth_in.request_id.clone(),
-                account_plain: None,
-            },
-        }
-    }
-    pub fn to_jwt_fb_claim(&self, issuer: &str) -> JwtFbClaims {
-        let iat = os_utils::system_time();
-        match self.auth_in.account_plain {
-            Some(true) => JwtFbClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-                iat,
-                exp: iat + 3600,
-                uid: self.account.account.to_string(),
-            },
-            _ => JwtFbClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-                iat,
-                exp: iat + 3600,
-                uid: self.account.acc_hash.as_ref().unwrap().to_string(),
-            },
-        }
-    }
-    pub fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
-        let iat = os_utils::system_time();
-        match self.auth_in.account_plain {
-            Some(true) => JwtClaims {
-                alg: "RS256".to_string(),
-                sub: self.account.account.to_string(),
-                idtype: self.account.id_type.to_string(),
-                iss: issuer.to_string(),
-                aud: self.auth_in.client.client_id.clone(),
-                iat,
-                exp: iat + 3600,
-            },
-            _ => JwtClaims {
-                alg: "RS256".to_string(),
-                sub: self.account.acc_hash.as_ref().unwrap().to_string(),
-                idtype: self.account.id_type.to_string(),
-                iss: issuer.to_string(),
-                aud: self.auth_in.client.client_id.clone(),
-                iat,
-                exp: iat + 3600,
-            },
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct JwtFbClaims {
-    alg: String,
-    sub: String,
-    iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
-    iat: u64,
-    exp: u64,
-    uid: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct JwtClaims {
-    alg: String,
-    sub: String,
-    idtype: String,
-    iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
-    iat: u64,
-    exp: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EthSigned {
-    pub auth: EthAuth,
-    pub signature: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct JwtSigned {
-    pub token: String,
-}
-
-impl ToJsonBytes for EthSigned {}
-impl EthSigned {
-    pub fn new(dauth: EthAuth, signed: &[u8]) -> Self {
-        Self {
-            auth: dauth,
-            signature: encode_hex(&signed),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InnerAccount {
     #[serde(skip_serializing)]
     pub account: String,
     pub id_type: IdType,
     pub acc_hash: Option<String>,
+    pub acc_and_type_hash: Option<String>,
     pub acc_seal: Option<String>,
 }
 
@@ -224,6 +83,7 @@ impl InnerAccount {
             account: "".to_string(),
             id_type: IdType::Mailto,
             acc_hash: None,
+            acc_and_type_hash: None,
             acc_seal: None,
         }
     }
@@ -233,6 +93,7 @@ impl InnerAccount {
             account: account,
             id_type: id_type,
             acc_hash: None,
+            acc_and_type_hash: None,
             acc_seal: None,
         }
     }
@@ -249,6 +110,30 @@ impl InnerAccount {
         self.acc_seal = Some(encode_hex(&sealed));
         let raw_hashed = signer::eth_hash(self.account.as_bytes());
         self.acc_hash = Some(encode_hex(&raw_hashed));
+        let raw_hashed2 =
+            signer::eth_hash(format!("{}:{}", self.id_type.to_string(), self.account).as_bytes());
+        self.acc_and_type_hash = Some(encode_hex(&raw_hashed2));
         Ok(())
     }
+}
+
+pub struct AuthService {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtpIn {
+    pub session_id: String,
+    pub cipher_account: String,
+    pub client: Client,
+    pub id_type: IdType,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthIn {
+    pub session_id: String,
+    pub request_id: String, // default None
+    pub cipher_code: String,
+    pub client: Client,
+    pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
+    pub sign_mode: SignMode, // default Proof
+    pub account_plain: Option<bool>,
 }

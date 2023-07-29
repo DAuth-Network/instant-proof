@@ -13,7 +13,7 @@ use sgx_urts::SgxEnclave;
 pub trait TeeAuth {
     fn exchange_key(&self, exk_in: ExchangeKeyIn) -> Result<ExchangeKeyOut, Error>;
     fn send_otp(&self, otp_in: OtpIn) -> Result<(), Error>;
-    fn auth_dauth(&self, otp_confirm_in: AuthIn) -> Result<AuthOut, Error>;
+    fn auth_in_one(&self, otp_confirm_in: AuthIn) -> Result<AuthOut, Error>;
 }
 
 #[derive(Debug)]
@@ -136,7 +136,7 @@ impl TeeAuth for TeeService {
         }
     }
 
-    fn auth_dauth(&self, otp_c_in: AuthIn) -> Result<AuthOut, Error> {
+    fn auth_in_one(&self, otp_c_in: AuthIn) -> Result<AuthOut, Error> {
         let auth_req = serde_json::to_vec(&otp_c_in).map_err(|err| {
             error!("encode client error, {}", err);
             Error::new(ErrorKind::DataError)

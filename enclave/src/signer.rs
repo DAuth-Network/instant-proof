@@ -22,6 +22,127 @@ pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct InnerAuth<'a> {
+    pub account: &'a InnerAccount,
+    pub auth_in: &'a AuthIn,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EthAuth {
+    pub acc_and_type_hash: String,
+    pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_plain: Option<String>,
+}
+
+impl<'a> InnerAuth<'a> {
+    fn to_eth_auth(&self) -> EthAuth {
+        match self.auth_in.account_plain {
+            Some(true) => EthAuth {
+                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
+                request_id: self.auth_in.request_id.clone(),
+                account_plain: Some(self.account.account.to_string()),
+            },
+            _ => EthAuth {
+                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
+                request_id: self.auth_in.request_id.clone(),
+                account_plain: None,
+            },
+        }
+    }
+    fn to_jwt_fb_claim(&self, issuer: &str) -> JwtFbClaims {
+        let iat = system_time();
+        match self.auth_in.account_plain {
+            Some(true) => JwtFbClaims {
+                alg: "RS256".to_string(),
+                sub: issuer.to_string(),
+                iss: issuer.to_string(),
+                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+                iat,
+                exp: iat + 3600,
+                uid: self.account.account.to_string(),
+            },
+            _ => JwtFbClaims {
+                alg: "RS256".to_string(),
+                sub: issuer.to_string(),
+                iss: issuer.to_string(),
+                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+                iat,
+                exp: iat + 3600,
+                uid: self.account.acc_hash.as_ref().unwrap().to_string(),
+            },
+        }
+    }
+    fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+        let iat = system_time();
+        match self.auth_in.account_plain {
+            Some(true) => JwtClaims {
+                alg: "RS256".to_string(),
+                sub: self.account.account.to_string(),
+                idtype: self.account.id_type.to_string(),
+                iss: issuer.to_string(),
+                aud: self.auth_in.client.client_id.clone(),
+                iat,
+                exp: iat + 3600,
+            },
+            _ => JwtClaims {
+                alg: "RS256".to_string(),
+                sub: self.account.acc_hash.as_ref().unwrap().to_string(),
+                idtype: self.account.id_type.to_string(),
+                iss: issuer.to_string(),
+                aud: self.auth_in.client.client_id.clone(),
+                iat,
+                exp: iat + 3600,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct JwtFbClaims {
+    alg: String,
+    sub: String,
+    iss: String,
+    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    iat: u64,
+    exp: u64,
+    uid: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JwtClaims {
+    alg: String,
+    sub: String,
+    idtype: String,
+    iss: String,
+    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    iat: u64,
+    exp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EthSigned {
+    /* when id type is email, all account information is available at client, skip auth */
+    pub auth: EthAuth,
+    pub signature: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JwtSigned {
+    pub token: String,
+}
+
+impl ToJsonBytes for EthSigned {}
+impl EthSigned {
+    pub fn new(eauth: EthAuth, signed: &[u8]) -> Self {
+        Self {
+            auth: eauth,
+            signature: encode_hex(&signed),
+        }
+    }
+}
+
 pub trait SignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>>;
 }
@@ -66,8 +187,7 @@ impl SignerAgent for JwtFbSignerAgent {
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
         let signature_b = eth_sign_abi(
-            &auth.account.id_type.to_string(),
-            &auth.account.acc_hash.as_ref().unwrap().to_string(),
+            &auth.account.acc_and_type_hash.as_ref().unwrap().to_string(),
             &auth.auth_in.request_id,
             &self.conf.signing_key,
         );
@@ -98,14 +218,10 @@ impl SignerAgent for BothSignerAgent {
     }
 }
 
-fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
+fn eth_sign_abi(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
     let prv_k_b = decode_hex(prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
-    info(&format!(
-        "sign raw parts: {} {} {}",
-        id_type, account, request_id
-    ));
-    let id_type_hash: [u8; 32] = eth_hash(id_type.as_bytes());
+    info(&format!("sign raw parts: {} {}", account, request_id));
     let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
     // when request_id is hash encoded, decode; else hash it.
     let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
@@ -115,7 +231,7 @@ fn eth_sign_abi(id_type: &str, account: &str, request_id: &str, prv_k: &str) -> 
             eth_hash(request_id.as_bytes())
         }
     };
-    let abi_encoded = abi_combine(&id_type_hash, &account_hash, &request_id_hash);
+    let abi_encoded = abi_combine(&account_hash, &request_id_hash);
     info(&format!("abi encode is {:?}", &abi_encoded));
     let abi_hash = eth_hash(&abi_encoded);
     info(&format!("abi hash is {:?}", &abi_hash));
@@ -146,9 +262,8 @@ pub fn eth_hash(b: &[u8]) -> [u8; 32] {
     output
 }
 
-fn abi_combine(id_abi: &[u8; 32], account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
-    let mut abi_all = Vec::with_capacity(3 * 32);
-    abi_all.extend_from_slice(id_abi);
+fn abi_combine(account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
+    let mut abi_all = Vec::with_capacity(2 * 32);
     abi_all.extend_from_slice(account_abi);
     abi_all.extend_from_slice(request_id_abi);
     abi_all
