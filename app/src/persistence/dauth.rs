@@ -16,7 +16,8 @@ pub fn insert_account_if_new(pool: &Pool, account: &Account) -> GenericResult<()
 pub fn insert_account(pool: &Pool, account: &Account) -> GenericResult<()> {
     let mut conn = pool.get_conn()?;
     let mut tx = conn.start_transaction(TxOpts::default())?;
-    let stmt = "insert into account(acc_hash, acc_and_type_hash, acc_seal, id_type) values (?,?,?)";
+    let stmt =
+        "insert into account(acc_hash, acc_and_type_hash, acc_seal, id_type) values (?,?,?,?)";
     tx.exec_drop(
         stmt,
         (
@@ -61,7 +62,7 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
     tx.exec_drop(
         "insert into auth (
             acc_hash, acc_and_type_hash, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
-        ) values (?, ?, ?, ?, ?, ?, ?)",
+        ) values (?, ?, ?, ?, ?, ?, ?, ?)",
         (
             hist.acc_hash,
             hist.acc_and_type_hash,
