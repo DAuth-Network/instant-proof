@@ -1,8 +1,11 @@
+use crate::get_config_seal_key;
+
 use super::config;
 use super::err::*;
 use super::log::*;
 use super::model::*;
 use super::os_utils::*;
+use super::sgx_utils;
 use jsonwebtoken::{
     decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
 };
@@ -124,8 +127,19 @@ struct JwtClaims {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EthSigned {
     /* when id type is email, all account information is available at client, skip auth */
-    pub auth: EthAuth,
-    pub signature: String,
+    auth: EthAuth,
+    signature: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ustore: Option<UserKeyStore>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserKeyStore {
+    pub user_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_key_sealed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_key_signed: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -135,10 +149,11 @@ pub struct JwtSigned {
 
 impl ToJsonBytes for EthSigned {}
 impl EthSigned {
-    pub fn new(eauth: EthAuth, signed: &[u8]) -> Self {
+    pub fn new(eauth: EthAuth, signed: &[u8], ustore: Option<UserKeyStore>) -> Self {
         Self {
             auth: eauth,
-            signature: encode_hex(&signed),
+            signature: encode_hex(signed),
+            ustore,
         }
     }
 }
@@ -191,8 +206,68 @@ impl SignerAgent for ProofSignerAgent {
             &auth.auth_in.request_id,
             &self.conf.signing_key,
         );
-        info(&format!("signature is {:?}", &signature_b));
-        Ok(EthSigned::new(auth.to_eth_auth(), &signature_b).to_json_bytes())
+        if auth.auth_in.user_key.as_ref().is_none() {
+            info(&format!(
+                "user key is None, return signature only: {:?}",
+                &signature_b
+            ));
+            Ok(EthSigned::new(auth.to_eth_auth(), &signature_b, None).to_json_bytes())
+        } else if auth.auth_in.user_key.as_ref().unwrap().eq("") {
+            info("user key is empty, generate key");
+            let user_key = sgx_utils::rand_bytes();
+            let user_key_sealed = sgx_utils::i_seal(&user_key, &get_config_seal_key())?;
+            let user_key_hex = encode_hex(&user_key);
+            let user_key_sealed_hex = encode_hex(&user_key_sealed);
+            let msg_to_sign = format!(
+                "{}:{}",
+                auth.account.acc_and_type_hash.as_ref().unwrap(),
+                &user_key_sealed_hex
+            );
+            let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
+            let user_key_signed_hex = encode_hex(&user_key_signed);
+            let user_key_store = UserKeyStore {
+                user_key: user_key_hex,
+                user_key_sealed: Some(user_key_sealed_hex),
+                user_key_signed: Some(user_key_signed_hex),
+            };
+            Ok(
+                EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
+                    .to_json_bytes(),
+            )
+        } else if auth.auth_in.user_key.as_ref().is_some()
+            && auth.auth_in.user_key_signature.as_ref().is_some()
+        {
+            let user_key_sealed_hex = auth.auth_in.user_key.as_ref().unwrap();
+            let user_key_signature = auth.auth_in.user_key_signature.as_ref().unwrap();
+            let msg_to_sign = format!(
+                "{}:{}",
+                auth.account.acc_and_type_hash.as_ref().unwrap(),
+                &user_key_sealed_hex
+            );
+            let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
+            let user_key_signed_hex = encode_hex(&user_key_signed);
+            if user_key_signed_hex.eq(user_key_signature) {
+                info("user key signature is valid");
+                let user_key_unsealed = sgx_utils::i_unseal(
+                    &decode_hex(&user_key_sealed_hex)?,
+                    &get_config_seal_key(),
+                )?;
+                let user_key_hex = encode_hex(&user_key_unsealed);
+                let user_key_store = UserKeyStore {
+                    user_key: user_key_hex,
+                    user_key_sealed: None,
+                    user_key_signed: None,
+                };
+                Ok(
+                    EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
+                        .to_json_bytes(),
+                )
+            } else {
+                return Err(GenericError::from("invalid user key signature"));
+            }
+        } else {
+            Err(GenericError::from("invalid request"))
+        }
     }
 }
 
@@ -294,9 +369,9 @@ fn pad_length(l: u16) -> Vec<u8> {
     padded
 }
 
-fn eth_sign_str(msg: &str, prv_k: String) -> Vec<u8> {
+fn eth_sign_str(msg: &str, prv_k: &str) -> Vec<u8> {
     let msg_sha = eth_message(msg);
-    let prv_k_b = decode_hex(&prv_k).unwrap();
+    let prv_k_b = decode_hex(prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
     let message = libsecp256k1::Message::parse_slice(&msg_sha).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);

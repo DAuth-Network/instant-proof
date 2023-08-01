@@ -60,6 +60,8 @@ pub struct AuthIn<'a> {
     pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
     pub sign_mode: SignMode, // default Proof
     pub account_plain: &'a Option<bool>,
+    pub user_key: &'a Option<String>,
+    pub user_key_signature: &'a Option<String>,
 }
 
 /// Exchange Key Request includes a user public key for secure channel

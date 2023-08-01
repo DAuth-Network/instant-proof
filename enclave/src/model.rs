@@ -136,4 +136,6 @@ pub struct AuthIn {
     pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
     pub sign_mode: SignMode, // default Proof
     pub account_plain: Option<bool>,
+    pub user_key: Option<String>,
+    pub user_key_signature: Option<String>,
 }

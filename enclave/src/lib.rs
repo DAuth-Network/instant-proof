@@ -367,11 +367,8 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 //Testing functions
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
-    /*
-    let token = "";
-    let sub = extract_apple_token(token);
-    println!("suB: {}", sub.unwrap());
-    */
+    let n = sgx_utils::rand_bytes();
+    println!("{:?}", n);
     sgx_status_t::SGX_SUCCESS
 }
 
