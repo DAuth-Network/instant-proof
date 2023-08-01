@@ -34,7 +34,7 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
     let mut result: Vec<Account> = Vec::new();
     let mut conn = pool.get_conn()?;
     let stmt = format!(
-        "select acc_hash, acc_and_hash, acc_seal, id_type from account where acc_hash='{}' and id_type='{}'",
+        "select acc_hash, acc_and_type_hash, acc_seal, id_type from account where acc_hash='{}' and id_type='{}'",
         account.acc_hash,
         account.id_type.to_string()
     );
