@@ -135,11 +135,11 @@ pub struct EthSigned {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserKeyStore {
-    pub user_key: String,
+    pub user_key_plain: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_key_sealed: Option<String>,
+    pub user_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user_key_signed: Option<String>,
+    pub user_key_signature: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -215,6 +215,7 @@ impl SignerAgent for ProofSignerAgent {
         } else if auth.auth_in.user_key.as_ref().unwrap().eq("") {
             info("user key is empty, generate key");
             let user_key = sgx_utils::rand_bytes();
+
             let user_key_sealed = sgx_utils::i_seal(&user_key, &get_config_seal_key())?;
             let user_key_hex = encode_hex(&user_key);
             let user_key_sealed_hex = encode_hex(&user_key_sealed);
@@ -226,9 +227,9 @@ impl SignerAgent for ProofSignerAgent {
             let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
             let user_key_signed_hex = encode_hex(&user_key_signed);
             let user_key_store = UserKeyStore {
-                user_key: user_key_hex,
-                user_key_sealed: Some(user_key_sealed_hex),
-                user_key_signed: Some(user_key_signed_hex),
+                user_key_plain: user_key_hex,
+                user_key: Some(user_key_sealed_hex),
+                user_key_signature: Some(user_key_signed_hex),
             };
             Ok(
                 EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
@@ -254,16 +255,16 @@ impl SignerAgent for ProofSignerAgent {
                 )?;
                 let user_key_hex = encode_hex(&user_key_unsealed);
                 let user_key_store = UserKeyStore {
-                    user_key: user_key_hex,
-                    user_key_sealed: None,
-                    user_key_signed: None,
+                    user_key_plain: user_key_hex,
+                    user_key: None,
+                    user_key_signature: None,
                 };
                 Ok(
                     EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
                         .to_json_bytes(),
                 )
             } else {
-                return Err(GenericError::from("invalid user key signature"));
+                Ok(EthSigned::new(auth.to_eth_auth(), &signature_b, None).to_json_bytes())
             }
         } else {
             Err(GenericError::from("invalid request"))
