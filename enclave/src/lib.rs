@@ -367,12 +367,6 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 //Testing functions
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
-    let n = sgx_utils::rand_bytes();
-    println!("{:?}", n);
-    let b = sgx_utils::i_seal(&n, "6b51a8db6ff573615c90a5cbeba3f9ee").unwrap();
-    println!("{:?}", b);
-    let n2 = sgx_utils::i_unseal(&b, "6b51a8db6ff573615c90a5cbeba3f9ee");
-    println!("{:?}", n2);
     sgx_status_t::SGX_SUCCESS
 }
 
