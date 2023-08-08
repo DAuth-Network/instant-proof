@@ -10,8 +10,6 @@ use serde_derive::{Deserialize, Serialize};
 extern crate sgx_types;
 extern crate sgx_urts;
 use crate::config::*;
-use crate::ecall;
-use crate::endpoint::utils;
 use crate::error as derr;
 use crate::model::*;
 use crate::persistence::dauth::*;
@@ -177,6 +175,9 @@ pub struct AuthInOneReq {
     id_type: IdType,
     request_id: Option<String>,
     sign_mode: Option<SignMode>, // default proof, or JWT
+    account_plain: Option<bool>,
+    user_key: Option<String>,
+    user_key_signature: Option<String>,
 }
 
 #[post("/auth_in_one")]
@@ -221,8 +222,11 @@ pub async fn auth_in_one(
         client: &client,
         id_type: req.id_type,
         sign_mode,
+        account_plain: &req.account_plain,
+        user_key: &req.user_key,
+        user_key_signature: &req.user_key_signature,
     };
-    let auth_result = tee.auth_dauth(auth_in);
+    let auth_result = tee.auth_in_one(auth_in);
     if auth_result.is_err() {
         return fail_resp(auth_result.err().unwrap());
     }
@@ -254,17 +258,15 @@ pub struct JwksResp {
     keys: Vec<RSAPublicKey>,
 }
 
-/*
 #[get("/jwks.json")]
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("get rsa pub key");
     let pub_key = endex.rsa_pub_key.clone();
     json_resp(JwksResp {
-        keys: vec![pub_key]
+        keys: vec![pub_key],
     })
 }
-*/
 
 fn get_client(
     clients: &Vec<Client>,

@@ -5,6 +5,7 @@ use dapi_ip;
 drop table if exists account;
 create table account (
     acc_hash varchar(128),
+    acc_and_type_hash varchar(128),
     acc_seal varchar(512),
     id_type varchar(20),
     PRIMARY KEY(acc_hash, id_type)
@@ -17,6 +18,7 @@ drop table if exists auth;
 create table auth (
     id BIGINT NOT NULL AUTO_INCREMENT,
     acc_hash varchar(128),
+    acc_and_type_hash varchar(128),
     id_type varchar(20),
     acc_auth_seq int not null,  /* auth seq or nonce */
     audience varchar(128), /* client_name*/

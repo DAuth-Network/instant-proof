@@ -6,6 +6,7 @@ use time::PrimitiveDateTime;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub acc_hash: String,
+    pub acc_and_type_hash: String,
     pub acc_seal: String,
     pub id_type: IdType,
 }
@@ -15,6 +16,8 @@ pub struct Account {
 pub enum SignMode {
     Jwt,
     Proof,
+    JwtFb,
+    Both,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -59,6 +62,7 @@ impl FromStr for IdType {
 #[derive(Debug, Clone)]
 pub struct Auth {
     pub acc_hash: String,
+    pub acc_and_type_hash: String,
     pub id_type: IdType,
     pub auth_id: i32,
     pub auth_datetime: PrimitiveDateTime,
@@ -71,6 +75,7 @@ impl Auth {
     pub fn new(account: &Account, audience: &str, request_id: &str) -> Self {
         Self {
             acc_hash: account.acc_hash.clone(),
+            acc_and_type_hash: account.acc_and_type_hash.clone(),
             id_type: account.id_type,
             auth_id: 0,
             auth_datetime: utils::now_datetime().unwrap(),

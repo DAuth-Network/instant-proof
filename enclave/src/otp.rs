@@ -158,7 +158,7 @@ impl OtpChannelClient for MailApiChannelClient {
                 content.replace("{{code}}", c_code)
             }
             None => format!(
-                "<h1>Please</h1> use the following code to verify your account:<br/>{}",
+                "Please use the following code to verify your account:<br/>{}",
                 c_code
             ),
         };
