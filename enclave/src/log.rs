@@ -1,7 +1,6 @@
 extern "C" {
-    pub fn oc_log (level: i32, msg: *const u8, msg_len: i32);
+    pub fn oc_log(level: i32, msg: *const u8, msg_len: i32);
 }
-
 
 pub fn info(msg: &str) {
     let msg_len = msg.len() as i32;
