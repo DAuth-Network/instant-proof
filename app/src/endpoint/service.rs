@@ -250,7 +250,10 @@ pub async fn auth_in_one(
 pub async fn quote(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("generate quote for current enclave");
-    HttpResponse::Ok().body(format!("{} is up!", endex.port))
+    let tee = &endex.tee;
+    let quote = tee.attest();
+    println!("quote: {:?}", quote);
+    HttpResponse::Ok().body("attested")
 }
 
 #[get("/health")]

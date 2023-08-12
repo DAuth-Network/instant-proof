@@ -14,6 +14,8 @@ pub trait Auth {
     fn auth_in_one(&self, otp_confirm_in: &AuthIn) -> Result<(InnerAccount, Vec<u8>), Error>;
 }
 
+pub struct AuthService {}
+
 impl Auth for AuthService {
     fn send_otp(&self, req: &OtpIn) -> Result<(), Error> {
         // verify session

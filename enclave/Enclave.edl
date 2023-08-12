@@ -6,6 +6,10 @@ enclave {
     from "sgx_net.edl" import *;
     from "sgx_pipe.edl" import *;
     from "sgx_file.edl" import *;
+    from "sgx_fs.edl" import *;
+    from "sgx_time.edl" import *;
+
+    include "sgx_quote.h"
 
     trusted {
 		 
@@ -37,6 +41,12 @@ enclave {
             [out] uint8_t* error_code
         );
 
+        public sgx_status_t ec_attest(
+            int max_len,
+            [out, size=max_len]uint8_t* report_b,
+            [out] uint32_t* report_b_size,
+            [out] uint8_t* error_code
+        );
 
         public sgx_status_t ec_get_sign_pub_key(
             [out, size=2048]uint8_t* pub_key,

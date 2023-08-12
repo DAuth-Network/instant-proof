@@ -22,15 +22,12 @@ extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
 extern crate sgx_tseal;
 use config::*;
-use jsonwebtoken::crypto::sign;
 use os_utils::{decode_hex, encode_hex};
 use serde::{Deserialize, Serialize};
 use sgx_tcrypto::*;
 use sgx_types::*;
 use std::convert::TryInto;
-use std::ffi::CStr;
 use std::mem::MaybeUninit;
-use std::os::raw::c_char;
 use std::slice;
 use std::string::{String, ToString};
 use std::sync::{Once, SgxMutex};
@@ -46,6 +43,7 @@ pub mod model;
 pub mod oauth;
 pub mod os_utils;
 pub mod otp;
+pub mod quote;
 pub mod session;
 pub mod sgx_utils;
 pub mod signer;
@@ -56,7 +54,6 @@ use self::model::*;
 use self::session::*;
 use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
-use signer::SignerAgent;
 
 // EnclaveState includes session state that constatntly changes
 struct EnclaveState {
@@ -69,6 +66,7 @@ struct EnclaveState {
 struct EnclaveConfig {
     pub config: TeeConfig,
     pub dauth: AuthService,
+    pub quote: quote::QuoteService,
     pub jwt: signer::JwtSignerAgent,
     pub jwt_fb: signer::JwtFbSignerAgent,
     pub proof: signer::ProofSignerAgent,
@@ -133,6 +131,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
                     dauth: AuthService {},
+                    quote: quote::QuoteService::new(tee_conf.ias.clone()),
                     mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
                     mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
                     sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
@@ -322,6 +321,44 @@ pub extern "C" fn ec_auth_in_one(
         *error_code = 255;
     }
     sgx_status_t::SGX_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn ec_attest(
+    max_len: u32,
+    report_o: *mut u8,
+    report_o_size: *mut u32,
+    error_code: &mut u8,
+) -> sgx_status_t {
+    let pub_key = get_pub_k_r1();
+    let r = &config(None)
+        .inner
+        .quote
+        .create_attestation_report(&pub_key, sgx_quote_sign_type_t::SGX_LINKABLE_SIGNATURE);
+    match r {
+        Ok(report) => {
+            let report_b = report.to_json_bytes();
+            if report_b.len() > max_len as usize {
+                error("report too long");
+                return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+            }
+            unsafe {
+                ptr::copy_nonoverlapping(report_b.as_ptr(), report_o, report_b.len());
+                *report_o_size = report_b.len().try_into().unwrap();
+            }
+            unsafe {
+                *error_code = 255;
+            }
+            sgx_status_t::SGX_SUCCESS
+        }
+        Err(e) => {
+            error(&format!("attest failed {:?}", e));
+            unsafe {
+                *error_code = e.to_int();
+            }
+            sgx_status_t::SGX_SUCCESS
+        }
+    }
 }
 
 fn get_config_seal_key() -> String {

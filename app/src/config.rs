@@ -89,12 +89,19 @@ pub struct Signer {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Attest {
+    pub spid: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DauthConfig {
     pub api: Api,
     pub db: Db,
     pub otp: OtpChannel,
     pub oauth: OAuth,
     pub signer: Signer,
+    pub ias: Attest,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -103,6 +110,7 @@ pub struct TeeConfig {
     pub oauth: OAuth,
     pub seal_key: String,
     pub signer: Signer,
+    pub ias: Attest,
 }
 
 impl DauthConfig {
@@ -112,6 +120,7 @@ impl DauthConfig {
             oauth: self.oauth.clone(),
             signer: self.signer.clone(),
             seal_key,
+            ias: self.ias.clone(),
         }
     }
 }

@@ -11,6 +11,11 @@ pub struct Account {
     pub id_type: IdType,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AttestReport {
+    quote: String,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SignMode {

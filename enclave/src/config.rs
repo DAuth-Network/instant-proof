@@ -49,11 +49,18 @@ pub struct Signer {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Attest {
+    pub spid: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeeConfig {
     pub otp: OtpChannel,
     pub oauth: OAuth,
     pub signer: Signer,
     pub seal_key: String,
+    pub ias: Attest,
 }
 
 impl std::default::Default for TeeConfig {
@@ -75,6 +82,10 @@ impl std::default::Default for TeeConfig {
                 jwt: SignerConf::default(),
                 jwt_fb: SignerConf::default(),
                 proof: SignerConf::default(),
+            },
+            ias: Attest {
+                spid: emp(),
+                api_key: emp(),
             },
         }
     }

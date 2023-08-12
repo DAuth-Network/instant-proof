@@ -117,8 +117,6 @@ impl InnerAccount {
     }
 }
 
-pub struct AuthService {}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OtpIn {
     pub session_id: String,

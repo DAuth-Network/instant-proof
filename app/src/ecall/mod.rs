@@ -40,6 +40,15 @@ extern "C" {
         error_code: *mut u8,
     ) -> sgx_status_t;
 
+    pub fn ec_attest(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        max_len: usize,
+        report_b: *mut u8,
+        report_b_size: *mut usize,
+        error_code: *mut u8,
+    ) -> sgx_status_t;
+
     pub fn ec_test(eid: sgx_enclave_id_t, retval: *mut sgx_status_t) -> sgx_status_t;
 
 }

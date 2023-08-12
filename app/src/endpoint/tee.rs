@@ -14,6 +14,7 @@ pub trait TeeAuth {
     fn exchange_key(&self, exk_in: ExchangeKeyIn) -> Result<ExchangeKeyOut, Error>;
     fn send_otp(&self, otp_in: OtpIn) -> Result<(), Error>;
     fn auth_in_one(&self, otp_confirm_in: AuthIn) -> Result<AuthOut, Error>;
+    fn attest(&self) -> Result<(AttestReport), Error>;
 }
 
 #[derive(Debug)]
@@ -181,6 +182,28 @@ impl TeeAuth for TeeService {
                 Err(Error::new(ErrorKind::SgxError))
             }
         }
+    }
+
+    fn attest(&self) -> Result<(AttestReport), Error> {
+        const MAX_LEN: usize = 4096;
+        let mut report_b = [0_u8; MAX_LEN];
+        let mut report_b_size = 0;
+        let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+        let mut error_code = 255;
+
+        let result = self.pool.install(|| unsafe {
+            ecall::ec_attest(
+                self.enclave.geteid(),
+                &mut sgx_result,
+                MAX_LEN,
+                report_b.as_ptr() as *mut u8,
+                &mut report_b_size,
+                &mut error_code,
+            )
+        });
+        let report_slice = &report_b[0..report_b_size];
+        let report = serde_json::from_slice(report_slice).unwrap();
+        Ok(report)
     }
 }
 
