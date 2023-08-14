@@ -3,13 +3,14 @@ import subprocess
 from smtplib import SMTP_SSL
 import toml
 import pathlib
-import datetime 
+import datetime
 
 
 def send_alert(cfg, errors):
-    server = SMTP_SSL(cfg['email_server'], 465)
-    server.login(cfg['email_account'], cfg['email_password'])
-    from_account = 'verify@keysafe.network'
+    server = SMTP_SSL(cfg['otp']['email']['server'], 465)
+    server.login(cfg['otp']['email']['account'],
+                 cfg['otp']['email']['password'])
+    from_account = cfg['otp']['email']['account']
     to_accounts = ['jiangyanxoxo@qq.com']
     msg = format_msg(from_account, to_accounts, errors)
     print(msg)
@@ -20,6 +21,7 @@ def send_alert(cfg, errors):
     )
     server.quit()
 
+
 def format_msg(from_acc, to_accs, errs):
     return (
         "Subject: keysafe error alert\r\n"
@@ -28,16 +30,18 @@ def format_msg(from_acc, to_accs, errs):
         f"{';'.join(errs)}"
     )
 
+
 def append_path(log_path):
     working_dir = pathlib.Path(__file__).parent.resolve().parent.resolve()
     print(working_dir)
     return working_dir.joinpath(log_path)
 
+
 def in_time_range(line):
     parts = line.split()
     if len(parts) > 6:
         log_time = line.split('|')[0].strip()
-        try: 
+        try:
             c = datetime.datetime.now()
             a = datetime.datetime(c.year, c.month, c.day, c.hour, c.minute, 0)
             b = a - datetime.timedelta(minutes=5)
@@ -45,11 +49,12 @@ def in_time_range(line):
             return log_time < a and log_time > b
         except Exception as err:
             print(err)
-            return false
+            return False
     print(parts)
-    return false
+    return False
 
-def check_log_file_for_err(log_path):
+
+def monitor_log_file(log_path):
     # looking for erros in the last n minutes
     log_path = append_path(log_path)
     print(log_path)
@@ -61,17 +66,18 @@ def check_log_file_for_err(log_path):
                 errs.append(l)
     return errs
 
+
 def check_std_file_for_err(log_path):
     log_path = append_path(log_path)
     print(log_path)
     errs = []
     return errs
 
-def monitor_app(conf):
-    port = conf['node_api_port']
+
+def monitor_app_port(port):
     result = subprocess.run(
-        f"netstat -antp|grep {port}", 
-        shell=True, 
+        f"netstat -antp|grep {port}",
+        shell=True,
         capture_output=True)
     content = result.stdout.decode('utf-8')
     for l in content.split('\n'):
@@ -79,19 +85,22 @@ def monitor_app(conf):
             return []
     return ['Port is not listening, process is down.']
 
-def monitor_log_files(conf):
-    err1 = check_log_file_for_err('bin/logs/err.log')
+
+def monitor_status(conf):
+    err1 = monitor_log_file('bin/logs/err.log')
     # err2 = check_std_file_for_err('bin/tee.log')
-    err3 = monitor_app(conf)
+    err3 = monitor_app_port(conf['api']['port'])
     errs = err1 + err3
     if errs:
-        # print(errs)        
+        # print(errs)
         send_alert(conf, errs)
+
 
 def load_cfg(cfg_file):
     with open(cfg_file, 'r') as f:
         return toml.load(f)
 
+
 if __name__ == '__main__':
     cfg = load_cfg(sys.argv[1])
-    monitor_log_files(cfg)
+    monitor_status(cfg)
