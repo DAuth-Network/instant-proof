@@ -83,6 +83,7 @@ impl<'a> InnerAuth<'a> {
             Some(true) => JwtClaims {
                 alg: "RS256".to_string(),
                 sub: self.account.account.to_string(),
+                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
                 iss: issuer.to_string(),
                 aud: self.auth_in.client.client_id.clone(),
@@ -92,6 +93,7 @@ impl<'a> InnerAuth<'a> {
             _ => JwtClaims {
                 alg: "RS256".to_string(),
                 sub: self.account.acc_hash.as_ref().unwrap().to_string(),
+                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
                 iss: issuer.to_string(),
                 aud: self.auth_in.client.client_id.clone(),
@@ -117,9 +119,10 @@ struct JwtFbClaims {
 struct JwtClaims {
     alg: String,
     sub: String,
+    acc_and_type_hash: String,
     idtype: String,
     iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    aud: String, // client id
     iat: u64,
     exp: u64,
 }
