@@ -6,3 +6,4 @@ if __name__ == '__main__':
     sk = SigningKey.from_string(bytes.fromhex(private_key), curve=SECP256k1)
     vk = sk.get_verifying_key()
     print(vk.to_string().hex())
+    print(vk.to_pem()))

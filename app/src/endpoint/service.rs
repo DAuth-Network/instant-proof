@@ -70,7 +70,7 @@ fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
 #[derive(Debug)]
 pub struct AppState {
     pub tee: TeeService,
-    pub rsa_pub_key: RSAPublicKey,
+    pub jwt_pub_key: RSAPublicKey,
     pub db_pool: Pool,
     pub clients: Vec<Client>,
     pub env: Env,
@@ -262,7 +262,7 @@ pub struct JwksResp {
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("get rsa pub key");
-    let pub_key = endex.rsa_pub_key.clone();
+    let pub_key = endex.jwt_pub_key.clone();
     json_resp(JwksResp {
         keys: vec![pub_key],
     })
