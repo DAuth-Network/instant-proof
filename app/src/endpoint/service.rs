@@ -13,9 +13,8 @@ use crate::error as derr;
 use crate::model::*;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
-use ecdsa::VerifyingKey;
 use mysql::*;
-use p256::NistP256;
+use p256::PublicKey;
 
 use super::tee::*;
 
@@ -71,7 +70,7 @@ fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
 #[derive(Debug)]
 pub struct AppState {
     pub tee: TeeService,
-    pub jwt_pub_key: VerifyingKey<NistP256>,
+    pub jwt_pub_key: PublicKey,
     pub db_pool: Pool,
     pub clients: Vec<Client>,
     pub env: Env,
@@ -256,7 +255,7 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwksResp {
-    keys: Vec<VerifyingKey<NistP256>>,
+    keys: Vec<PublicKey>,
 }
 
 #[get("/jwks.json")]
