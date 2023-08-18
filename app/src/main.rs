@@ -10,17 +10,16 @@ use std::str;
 use actix_cors::Cors;
 use actix_files as afs;
 use actix_web::{dev::Service as _, web, App, HttpServer};
-use jsonwebkey_convert::der::FromPem;
-use jsonwebkey_convert::*;
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-
+use ecdsa::VerifyingKey;
 use log::{debug, error, info, warn};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use p256::NistP256;
 extern crate sgx_types;
 extern crate sgx_urts;
+use mysql::*;
+use pem::parse;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
-
-use mysql::*;
 
 mod config;
 mod ecall;
@@ -118,8 +117,9 @@ fn get_rsa_pub_key(enclave: SgxEnclave) -> Result<String> {
 }
 */
 
-fn parse_jwk(rsa_pub_key: String) -> RSAPublicKey {
-    jsonwebkey_convert::RSAPublicKey::from_pem(rsa_pub_key).unwrap()
+fn parse_jwk(rsa_pub_key: String) -> VerifyingKey<NistP256> {
+    let a = parse(&rsa_pub_key).expect("Parse public key failed.");
+    VerifyingKey::from_sec1_bytes(&a.contents).unwrap()
 }
 
 /// Create database connection pool using conf from config file

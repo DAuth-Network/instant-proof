@@ -3,7 +3,6 @@ extern crate openssl;
 use std::str;
 use actix_http::header::{HeaderMap, ORIGIN};
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
-use jsonwebkey_convert::*;
 use log::{error, info};
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
@@ -14,7 +13,9 @@ use crate::error as derr;
 use crate::model::*;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
+use ecdsa::VerifyingKey;
 use mysql::*;
+use p256::NistP256;
 
 use super::tee::*;
 
@@ -70,7 +71,7 @@ fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
 #[derive(Debug)]
 pub struct AppState {
     pub tee: TeeService,
-    pub jwt_pub_key: RSAPublicKey,
+    pub jwt_pub_key: VerifyingKey<NistP256>,
     pub db_pool: Pool,
     pub clients: Vec<Client>,
     pub env: Env,
@@ -255,7 +256,7 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwksResp {
-    keys: Vec<RSAPublicKey>,
+    keys: Vec<VerifyingKey<NistP256>>,
 }
 
 #[get("/jwks.json")]
