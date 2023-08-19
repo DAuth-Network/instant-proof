@@ -187,7 +187,7 @@ impl SignerAgent for JwtSignerAgent {
         let claim = auth.to_jwt_claim(&self.conf.signer);
         let key_bytes = decode_hex(&self.conf.signing_key).unwrap();
         // let key = EncodingKey::from_rsa_pem(pem_key)?;
-        let key = EncodingKey::from_secret(key_bytes);
+        let key = EncodingKey::from_secret(&key_bytes);
         let token = encode(&Header::new(Algorithm::ES256), &claim, &key)?;
         Ok(token.as_bytes().to_vec())
     }
