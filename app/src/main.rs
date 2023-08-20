@@ -150,7 +150,7 @@ fn load_conf(fname: &str) -> config::DauthConfig {
         .unwrap()
         .try_deserialize::<config::DauthConfig>()
         .unwrap();
-    conf.signer.jwt.signing_key = bytes_to_pem(env::var("PROOF_KEY").unwrap());
+    conf.signer.jwt.signing_key = bytes_to_pem(&env::var("PROOF_KEY").unwrap());
     conf.signer.jwt_fb.signing_key = env::var("JWT_FB_KEY").unwrap();
     conf.signer.proof.signing_key = env::var("PROOF_KEY").unwrap();
     conf
@@ -171,7 +171,7 @@ async fn main() -> std::io::Result<()> {
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
     let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
-    let jwt_pub_key = parse_pem(env::var("PROOF_PUB_KEY").unwrap());
+    let jwt_pub_key = parse_pem(&env::var("PROOF_PUB_KEY").unwrap());
     let edata: web::Data<AppState> = web::Data::new(AppState {
         tee: TeeService::new(enclave, pool),
         jwt_pub_key,
