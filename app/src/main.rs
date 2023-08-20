@@ -150,7 +150,7 @@ fn load_conf(fname: &str) -> config::DauthConfig {
         .unwrap()
         .try_deserialize::<config::DauthConfig>()
         .unwrap();
-    conf.signer.jwt.signing_key = bytes_to_pem(&env::var("PROOF_KEY").unwrap());
+    conf.signer.jwt.signing_key = env::var("PROOF_KEY_PEM").unwrap();
     conf.signer.jwt_fb.signing_key = env::var("JWT_FB_KEY").unwrap();
     conf.signer.proof.signing_key = env::var("PROOF_KEY").unwrap();
     conf
