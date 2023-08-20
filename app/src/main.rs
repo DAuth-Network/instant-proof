@@ -12,7 +12,7 @@ use actix_files as afs;
 use actix_web::{dev::Service as _, web, App, HttpServer};
 use log::{debug, error, info, warn};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-use p256::PublicKey;
+use p256::{PublicKey, SecretKey};
 extern crate sgx_types;
 extern crate sgx_urts;
 use mysql::*;
@@ -115,8 +115,15 @@ fn get_rsa_pub_key(enclave: SgxEnclave) -> Result<String> {
 }
 */
 
-fn parse_jwk(pem_pub_key: String) -> PublicKey {
+fn parse_pem(pem_pub_key: &str) -> PublicKey {
     pem_pub_key.parse::<p256::PublicKey>().unwrap()
+}
+
+fn bytes_to_pem(hex_key: &str) -> String {
+    let bytes_key = hex::decode(hex_key).unwrap();
+    let sk = SecretKey::from_slice(&bytes_key).unwrap();
+    let sk_pem = key.to_sec1_pem(Default::default()).unwrap();
+    sk_pem.to_string()
 }
 
 /// Create database connection pool using conf from config file
@@ -143,7 +150,7 @@ fn load_conf(fname: &str) -> config::DauthConfig {
         .unwrap()
         .try_deserialize::<config::DauthConfig>()
         .unwrap();
-    conf.signer.jwt.signing_key = env::var("PROOF_KEY").unwrap();
+    conf.signer.jwt.signing_key = bytes_to_pem(env::var("PROOF_KEY").unwrap());
     conf.signer.jwt_fb.signing_key = env::var("JWT_FB_KEY").unwrap();
     conf.signer.proof.signing_key = env::var("PROOF_KEY").unwrap();
     conf
@@ -164,7 +171,7 @@ async fn main() -> std::io::Result<()> {
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
     let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
-    let jwt_pub_key = parse_jwk(env::var("PROOF_PUB_KEY").unwrap());
+    let jwt_pub_key = parse_pem(env::var("PROOF_PUB_KEY").unwrap());
     let edata: web::Data<AppState> = web::Data::new(AppState {
         tee: TeeService::new(enclave, pool),
         jwt_pub_key,
