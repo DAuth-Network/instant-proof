@@ -122,7 +122,7 @@ fn parse_pem(pem_pub_key: &str) -> PublicKey {
 fn bytes_to_pem(hex_key: &str) -> String {
     let bytes_key = hex::decode(hex_key).unwrap();
     let sk = SecretKey::from_slice(&bytes_key).unwrap();
-    let sk_pem = key.to_sec1_pem(Default::default()).unwrap();
+    let sk_pem = sk.to_sec1_pem(Default::default()).unwrap();
     sk_pem.to_string()
 }
 
