@@ -15,7 +15,6 @@ use sgx_tcrypto::*;
 
 use crate::config::Attest;
 
-use self::httparse;
 use self::itertools::Itertools;
 use super::log::*;
 use super::os_utils::*;
@@ -282,7 +281,7 @@ impl QuoteService {
 
         let attn_report = get_report_from_intel(&self.api_key, ias_sock, quote_vec);
         println!("{}", attn_report);
-        Ok((attn_report))
+        Ok(attn_report)
     }
 }
 

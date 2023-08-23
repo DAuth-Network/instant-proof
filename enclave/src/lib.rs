@@ -17,6 +17,8 @@ extern crate http_req;
 extern crate serde;
 extern crate serde_json;
 extern crate sgx_rand;
+extern crate webpki;
+extern crate webpki_roots;
 #[macro_use]
 extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
@@ -26,6 +28,7 @@ use os_utils::{decode_hex, encode_hex};
 use serde::{Deserialize, Serialize};
 use sgx_tcrypto::*;
 use sgx_types::*;
+use sgx_utils::pub_k_from_user;
 use std::convert::TryInto;
 use std::mem::MaybeUninit;
 use std::slice;
@@ -331,13 +334,14 @@ pub extern "C" fn ec_attest(
     error_code: &mut u8,
 ) -> sgx_status_t {
     let pub_key = get_pub_k_r1();
+    let pub_key_sgx = pub_k_from_user(&pub_key);
     let r = &config(None)
         .inner
         .quote
-        .create_attestation_report(&pub_key, sgx_quote_sign_type_t::SGX_LINKABLE_SIGNATURE);
+        .create_attestation_report(&pub_key_sgx, sgx_quote_sign_type_t::SGX_LINKABLE_SIGNATURE);
     match r {
         Ok(report) => {
-            let report_b = report.to_json_bytes();
+            let report_b = report.as_bytes();
             if report_b.len() > max_len as usize {
                 error("report too long");
                 return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
@@ -354,7 +358,7 @@ pub extern "C" fn ec_attest(
         Err(e) => {
             error(&format!("attest failed {:?}", e));
             unsafe {
-                *error_code = e.to_int();
+                *error_code = 7;
             }
             sgx_status_t::SGX_SUCCESS
         }

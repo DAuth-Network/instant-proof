@@ -32,7 +32,13 @@ jsonwebtoken = { git = "https://github.com/mesalock-linux/jsonwebtoken-sgx" }
 base64 = { git = "https://github.com/mesalock-linux/rust-base64-sgx" }
 itertools = { version = "0.8" , default-features = false, features = []}
 httparse = { version = "1.3.2", default-features=false }
+webpki-roots= { git = "https://github.com/mesalock-linux/webpki-roots", branch = "mesalock_sgx" }
+webpki = { git = "https://github.com/mesalock-linux/webpki", branch = "mesalock_sgx" }
 
+[dependencies.rustls]
+git = "https://github.com/mesalock-linux/rustls"
+branch = "mesalock_sgx"
+features = ["dangerous_configuration"]
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_alloc = { path = "../../../sgx_alloc" }
