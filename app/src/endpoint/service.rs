@@ -246,13 +246,13 @@ pub async fn auth_in_one(
     json_resp(auth_out.cipher_sign)
 }
 
-#[get("/quote")]
-pub async fn quote(endex: web::Data<AppState>) -> impl Responder {
+#[get("/attest")]
+pub async fn attest(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("generate quote for current enclave");
     let tee = &endex.tee;
-    let quote = tee.attest();
-    println!("quote: {:?}", quote);
+    let attest_report = tee.attest();
+    println!("attest report: {:?}", attest_report);
     HttpResponse::Ok().body("attested")
 }
 

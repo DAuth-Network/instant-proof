@@ -23,6 +23,7 @@ extern crate webpki_roots;
 extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
 extern crate sgx_tseal;
+use attest::AttestReport;
 use config::*;
 use os_utils::{decode_hex, encode_hex};
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,7 @@ use std::sync::{Once, SgxMutex};
 // use std::prelude::v1::*;
 use std::ptr;
 use std::str;
+pub mod attest;
 pub mod auth;
 pub mod config;
 pub mod err;
@@ -46,7 +48,6 @@ pub mod model;
 pub mod oauth;
 pub mod os_utils;
 pub mod otp;
-pub mod quote;
 pub mod session;
 pub mod sgx_utils;
 pub mod signer;
@@ -69,7 +70,7 @@ struct EnclaveState {
 struct EnclaveConfig {
     pub config: TeeConfig,
     pub dauth: AuthService,
-    pub quote: quote::QuoteService,
+    pub quote: attest::AttestService,
     pub jwt: signer::JwtSignerAgent,
     pub jwt_fb: signer::JwtFbSignerAgent,
     pub proof: signer::ProofSignerAgent,
@@ -134,7 +135,7 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                 inner: EnclaveConfig {
                     config: tee_conf.clone(),
                     dauth: AuthService {},
-                    quote: quote::QuoteService::new(tee_conf.ias.clone()),
+                    quote: attest::AttestService::new(tee_conf.ias.clone()),
                     mail: otp::MailChannelClient::new(tee_conf.otp.email.clone()),
                     mail_api: otp::MailApiChannelClient::new(tee_conf.otp.email_api.clone()),
                     sms: otp::SmsChannelClient::new(tee_conf.otp.sms.clone()),
@@ -341,7 +342,10 @@ pub extern "C" fn ec_attest(
         .create_attestation_report(&pub_key_sgx, sgx_quote_sign_type_t::SGX_LINKABLE_SIGNATURE);
     match r {
         Ok(report) => {
-            let report_b = report.as_bytes();
+            let full_report = AttestReport {
+                quote: report.to_string(),
+            };
+            let report_b = full_report.to_json_bytes();
             if report_b.len() > max_len as usize {
                 error("report too long");
                 return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
