@@ -31,8 +31,8 @@ use std::untrusted::fs;
 use std::vec::Vec;
 
 pub const DEV_HOSTNAME: &str = "api.trustedservices.intel.com";
-pub const SIGRL_SUFFIX: &str = "/sgx/dev/attestation/v3/sigrl/";
-pub const REPORT_SUFFIX: &str = "/sgx/dev/attestation/v3/report";
+pub const SIGRL_SUFFIX: &str = "/sgx/dev/attestation/v4/sigrl/";
+pub const REPORT_SUFFIX: &str = "/sgx/dev/attestation/v4/report";
 pub const CERTEXPIRYDAYS: i64 = 90i64;
 
 extern "C" {
