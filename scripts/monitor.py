@@ -10,7 +10,7 @@ def send_alert(cfg, errors):
     server = SMTP_SSL(cfg['otp']['email']['server'], 465)
     server.login(cfg['otp']['email']['account'],
                  cfg['otp']['email']['password'])
-    from_account = cfg['otp']['email']['account']
+    from_account = cfg['otp']['email']['sender']
     to_accounts = ['jiangyanxoxo@qq.com']
     msg = format_msg(from_account, to_accounts, errors)
     print(msg)
