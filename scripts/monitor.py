@@ -11,7 +11,7 @@ def send_alert(cfg, errors):
     server.login(cfg['otp']['email']['account'],
                  cfg['otp']['email']['password'])
     from_account = cfg['otp']['email']['sender']
-    to_accounts = ['jiangyanxoxo@qq.com']
+    to_accounts = cfg['alerts']
     msg = format_msg(from_account, to_accounts, errors)
     print(msg)
     server.sendmail(
@@ -74,25 +74,26 @@ def check_std_file_for_err(log_path):
     return errs
 
 
-def monitor_app_port(port):
+def monitor_app_port(api_conf):
+    ip = api_conf['host']
+    port = api_conf['port']
     result = subprocess.run(
         f"netstat -antp|grep {port}",
         shell=True,
         capture_output=True)
     content = result.stdout.decode('utf-8')
     for l in content.split('\n'):
-        if 'LISTEN' in l and f'0.0.0.0:{port}' == l.split()[3]:
+        if 'LISTEN' in l and f'{ip}:{port}' == l.split()[3]:
             return []
-    return ['Port is not listening, process is down.']
+    f_path = pathlib.Path(__file__).parent.resolve()
+    return [f'Port {port} is not listening, {f_path} process is down.']
 
 
 def monitor_status(conf):
     err1 = monitor_log_file('bin/logs/err.log')
-    # err2 = check_std_file_for_err('bin/tee.log')
-    err3 = monitor_app_port(conf['api']['port'])
+    err3 = monitor_app_port(conf['api'])
     errs = err1 + err3
     if errs:
-        # print(errs)
         send_alert(conf, errs)
 
 
