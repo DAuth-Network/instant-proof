@@ -283,7 +283,9 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
         code, "https://demo-api.dauth.network/redirect/twitter"
     );
     info(&token_req);
-    let auth_header = format!("Basic {}", conf.client_secret);
+    let auth_id_str = format!("{}:{}", conf.client_id, conf.client_secret);
+    let auth_id_b64 = base64::encode(auth_id_str.as_bytes());
+    let auth_header = format!("Basic {}", auth_id_b64);
     let token_headers = HashMap::from([
         ("Content-Type", "application/x-www-form-urlencoded"),
         ("Authorization", &auth_header),

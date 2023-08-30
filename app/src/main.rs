@@ -10,17 +10,14 @@ use std::str;
 use actix_cors::Cors;
 use actix_files as afs;
 use actix_web::{dev::Service as _, web, App, HttpServer};
-use jsonwebkey_convert::der::FromPem;
-use jsonwebkey_convert::*;
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
-
 use log::{debug, error, info, warn};
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use p256::{PublicKey, SecretKey};
 extern crate sgx_types;
 extern crate sgx_urts;
+use mysql::*;
 use sgx_types::*;
 use sgx_urts::SgxEnclave;
-
-use mysql::*;
 
 mod config;
 mod ecall;
@@ -118,8 +115,15 @@ fn get_rsa_pub_key(enclave: SgxEnclave) -> Result<String> {
 }
 */
 
-fn parse_jwk(rsa_pub_key: String) -> RSAPublicKey {
-    jsonwebkey_convert::RSAPublicKey::from_pem(rsa_pub_key).unwrap()
+fn parse_pem(pem_pub_key: &str) -> PublicKey {
+    pem_pub_key.parse::<p256::PublicKey>().unwrap()
+}
+
+fn bytes_to_pem(hex_key: &str) -> String {
+    let bytes_key = hex::decode(hex_key).unwrap();
+    let sk = SecretKey::from_slice(&bytes_key).unwrap();
+    let sk_pem = sk.to_sec1_pem(Default::default()).unwrap();
+    sk_pem.to_string()
 }
 
 /// Create database connection pool using conf from config file
@@ -146,7 +150,7 @@ fn load_conf(fname: &str) -> config::DauthConfig {
         .unwrap()
         .try_deserialize::<config::DauthConfig>()
         .unwrap();
-    conf.signer.jwt.signing_key = env::var("JWT_KEY").unwrap();
+    conf.signer.jwt.signing_key = env::var("PROOF_KEY_PEM").unwrap();
     conf.signer.jwt_fb.signing_key = env::var("JWT_FB_KEY").unwrap();
     conf.signer.proof.signing_key = env::var("PROOF_KEY").unwrap();
     conf
@@ -167,10 +171,10 @@ async fn main() -> std::io::Result<()> {
     // edata stores environment and config information
     let client_db = init_db_pool(&conf.db.client);
     let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
-    let rsa_pub_key = parse_jwk(env::var("RSA_PUB_KEY").unwrap());
+    let jwt_pub_key = parse_pem(&env::var("PROOF_PUB_KEY").unwrap());
     let edata: web::Data<AppState> = web::Data::new(AppState {
         tee: TeeService::new(enclave, pool),
-        rsa_pub_key,
+        jwt_pub_key,
         db_pool: init_db_pool(&conf.db.auth),
         clients: query_clients(&client_db).unwrap(),
         env: conf.api.env.clone(),

@@ -3,20 +3,21 @@ extern crate openssl;
 use std::str;
 use actix_http::header::{HeaderMap, ORIGIN};
 use actix_web::{get, post, web, HttpRequest, HttpResponse, Responder};
-use jsonwebkey_convert::*;
+use elliptic_curve::JwkEcKey;
 use log::{error, info};
 use serde::Serialize as Serialize2;
 use serde_derive::{Deserialize, Serialize};
 extern crate sgx_types;
 extern crate sgx_urts;
+use super::tee::*;
 use crate::config::*;
 use crate::error as derr;
 use crate::model::*;
 use crate::persistence::dauth::*;
 use crate::persistence::dclient::*;
-use mysql::*;
 
-use super::tee::*;
+use mysql::*;
+use p256::PublicKey;
 
 /// BaseResp is a base response for most request
 /// status can either be:
@@ -70,7 +71,7 @@ fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
 #[derive(Debug)]
 pub struct AppState {
     pub tee: TeeService,
-    pub rsa_pub_key: RSAPublicKey,
+    pub jwt_pub_key: PublicKey,
     pub db_pool: Pool,
     pub clients: Vec<Client>,
     pub env: Env,
@@ -255,17 +256,16 @@ pub async fn health(endex: web::Data<AppState>) -> impl Responder {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JwksResp {
-    keys: Vec<RSAPublicKey>,
+    keys: Vec<JwkEcKey>,
 }
 
 #[get("/jwks.json")]
 pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     // for health check
     info!("get rsa pub key");
-    let pub_key = endex.rsa_pub_key.clone();
-    json_resp(JwksResp {
-        keys: vec![pub_key],
-    })
+    let pub_key = endex.jwt_pub_key.clone();
+    let jwk = pub_key.to_jwk();
+    json_resp(JwksResp { keys: vec![jwk] })
 }
 
 fn get_client(

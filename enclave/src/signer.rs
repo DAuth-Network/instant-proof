@@ -81,7 +81,7 @@ impl<'a> InnerAuth<'a> {
         let iat = system_time();
         match self.auth_in.account_plain {
             Some(true) => JwtClaims {
-                alg: "RS256".to_string(),
+                alg: "ES256".to_string(),
                 sub: self.account.account.to_string(),
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
@@ -91,7 +91,7 @@ impl<'a> InnerAuth<'a> {
                 exp: iat + 3600,
             },
             _ => JwtClaims {
-                alg: "RS256".to_string(),
+                alg: "ES256".to_string(),
                 sub: self.account.acc_hash.as_ref().unwrap().to_string(),
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
@@ -186,8 +186,8 @@ impl SignerAgent for JwtSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
         let claim = auth.to_jwt_claim(&self.conf.signer);
         let pem_key = self.conf.signing_key.as_bytes();
-        let key = EncodingKey::from_rsa_pem(pem_key)?;
-        let token = encode(&Header::new(Algorithm::RS256), &claim, &key)?;
+        let key = EncodingKey::from_ec_pem(pem_key)?;
+        let token = encode(&Header::new(Algorithm::ES256), &claim, &key)?;
         Ok(token.as_bytes().to_vec())
     }
 }
@@ -300,6 +300,7 @@ impl SignerAgent for BothSignerAgent {
 fn eth_sign_abi(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
     let prv_k_b = decode_hex(prv_k).unwrap();
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
+
     info(&format!("sign raw parts: {} {}", account, request_id));
     let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
     // when request_id is hash encoded, decode; else hash it.
