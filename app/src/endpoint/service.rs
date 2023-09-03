@@ -132,7 +132,6 @@ pub struct AuthOtpReq {
     session_id: String,
     cipher_account: String,
     id_type: IdType,
-    request_id: Option<String>,
 }
 
 // with BaseResp
@@ -175,7 +174,7 @@ pub struct AuthInOneReq {
     cipher_code: String,
     id_type: IdType,
     id_key_salt: i32,
-    sign_msg: Option<String>,
+    sign_msg: String,
     sign_mode: Option<SignMode>, // default proof, or JWT
     account_plain: Option<bool>,
     user_key: Option<String>,
@@ -203,17 +202,7 @@ pub async fn auth_in_one(
     }
     let client = client_o.unwrap();
     let tee = &endex.tee;
-    let request_id = match &req.request_id {
-        Some(r) => {
-            if r.starts_with("0x") {
-                r[2..].to_string()
-            } else {
-                r.to_string()
-            }
-        }
-        None => "None".to_string(),
-    };
-    let sign_mode = match &req.sign_mode {
+   let sign_mode = match &req.sign_mode {
         Some(r) => r.to_owned(),
         None => SignMode::Proof,
     };
@@ -223,8 +212,8 @@ pub async fn auth_in_one(
         client: &client,
         id_type: req.id_type,
         id_key_salt: req.id_key_salt,
-        sign_msg: req.sign_msg,
-        sign_mode,
+        sign_msg: &req.sign_msg,
+        sign_mode: sign_mode,
         account_plain: &req.account_plain,
         user_key: &req.user_key,
         user_key_signature: &req.user_key_signature,
@@ -240,7 +229,7 @@ pub async fn auth_in_one(
         error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(derr::Error::new(derr::ErrorKind::DbError));
     }
-    let auth = Auth::new(&account, &client.client_name, &request_id);
+    let auth = Auth::new(&account, &client.client_name);
     let insert_auth_r = insert_auth(&endex.db_pool, auth);
     if insert_auth_r.is_err() {
         error!("insert auth error {}", insert_auth_r.err().unwrap());

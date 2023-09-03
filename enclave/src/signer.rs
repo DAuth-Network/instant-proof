@@ -14,6 +14,7 @@ use std::convert::TryInto;
 use std::string::*;
 use std::vec::Vec;
 use tiny_keccak::*;
+use bip32::{Prefix, XPrv, DerivationPath};
 
 pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     let conf = &config(None).inner;
@@ -47,7 +48,7 @@ impl<'a> InnerAuth<'a> {
                 account_plain: Some(self.account.account.to_string()),
                 id_pub_key: pub_k,
             },
-            _ => ProoAuth {
+            _ => ProofAuth {
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 account_plain: None,
                 id_pub_key: pub_k,
@@ -204,19 +205,21 @@ impl SignerAgent for JwtFbSignerAgent {
 
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
-        // new signer requires id_key_salt and sign_msg not None
-        if auth.auth_in.sign_msg.is_none() {
-            error("sign_msg must not be none");
-            return Err(GenericError::from("invalid request missing sign_msg"));
-        }
         // generate new user private key and public key
+        let account_hash = match &auth.account.acc_and_type_hash {
+            Some(r) => r,
+            None => {
+                error("acc_and_type_hash must not be none");
+                return Err(GenericError::from("invalid request"));
+            }
+        };
         let (id_priv_key, id_pub_key) = derive_key(
             &self.conf.signing_key,
+            &account_hash,
             auth.auth_in.id_key_salt,
-            auth.account.acc_and_type_hash,
         )?;
-        let id_pub_key_hex = encode_hex(id_pub_key);
-        let signature_b = eth_sign_abi(&auth.auth_in.sign_msg, id_priv_key);
+        let id_pub_key_hex = encode_hex(&id_pub_key);
+        let signature_b = eth_sign_abi(&auth.auth_in.sign_msg, &id_priv_key);
         if auth.auth_in.user_key.as_ref().is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
@@ -302,15 +305,27 @@ fn derive_key(
     let account_index = str_to_i32(account_hash);
     println!("account i32 is {}", account_index);
     let derive_path = format!("m/0/{}/{}", account_index, salt_index);
-    let dpk = derive_xprv(&s, &derive_path)?;
+    let dpk = derive_xprv(&master_k, &derive_path)?;
     let priv_kb = dpk.to_bytes();
     let pub_k = dpk.public_key();
-    (priv_kb, pub_k.to_bytes())
+    Ok((priv_kb, pub_k.to_bytes()))
 }
 
 fn derive_xprv(seed: &[u8], path: &str) -> GenericResult<XPrv> {
-    let p = path.parse()?;
-    XPrv::derive_from_path(seed, p)?
+    let p: DerivationPath = match path.parse() {
+        Ok(r) => r,
+        Err(e) => {
+            error("parse derive path failed");
+            return Err(GenericError::from("invalid derive path"));
+        }
+    };
+    match XPrv::derive_from_path(seed, &p) {
+        Ok(r) => Ok(r),
+        Err(e) => {
+            error("derive failed");
+            Err(GenericError::from("derive failed"))
+        }
+    }
 }
 
 fn str_to_i32(data_hash: &str) -> i32 {
