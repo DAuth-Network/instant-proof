@@ -174,7 +174,8 @@ pub struct AuthInOneReq {
     session_id: String,
     cipher_code: String,
     id_type: IdType,
-    request_id: Option<String>,
+    id_key_salt: i32,
+    sign_msg: Option<String>,
     sign_mode: Option<SignMode>, // default proof, or JWT
     account_plain: Option<bool>,
     user_key: Option<String>,
@@ -219,9 +220,10 @@ pub async fn auth_in_one(
     let auth_in = AuthIn {
         session_id: &req.session_id,
         cipher_code: &req.cipher_code,
-        request_id: &request_id,
         client: &client,
         id_type: req.id_type,
+        id_key_salt: req.id_key_salt,
+        sign_msg: req.sign_msg,
         sign_mode,
         account_plain: &req.account_plain,
         user_key: &req.user_key,

@@ -32,25 +32,25 @@ pub struct InnerAuth<'a> {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct EthAuth {
+pub struct ProofAuth {
     pub acc_and_type_hash: String,
-    pub request_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_plain: Option<String>,
+    pub id_pub_key: String,
 }
 
 impl<'a> InnerAuth<'a> {
-    fn to_eth_auth(&self) -> EthAuth {
+    fn to_proof_auth(&self, pub_k: String) -> ProofAuth {
         match self.auth_in.account_plain {
-            Some(true) => EthAuth {
+            Some(true) => ProofAuth {
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                request_id: self.auth_in.request_id.clone(),
                 account_plain: Some(self.account.account.to_string()),
+                id_pub_key: pub_k,
             },
-            _ => EthAuth {
+            _ => ProoAuth {
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                request_id: self.auth_in.request_id.clone(),
                 account_plain: None,
+                id_pub_key: pub_k,
             },
         }
     }
@@ -128,9 +128,9 @@ struct JwtClaims {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EthSigned {
+pub struct ProofSigned {
     /* when id type is email, all account information is available at client, skip auth */
-    auth: EthAuth,
+    auth: ProofAuth,
     signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     ustore: Option<UserKeyStore>,
@@ -150,11 +150,11 @@ pub struct JwtSigned {
     pub token: String,
 }
 
-impl ToJsonBytes for EthSigned {}
-impl EthSigned {
-    pub fn new(eauth: EthAuth, signed: &[u8], ustore: Option<UserKeyStore>) -> Self {
+impl ToJsonBytes for ProofSigned {}
+impl ProofSigned {
+    pub fn new(auth: ProofAuth, signed: &[u8], ustore: Option<UserKeyStore>) -> Self {
         Self {
-            auth: eauth,
+            auth: auth,
             signature: encode_hex(signed),
             ustore,
         }
@@ -204,17 +204,21 @@ impl SignerAgent for JwtFbSignerAgent {
 
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
-        let signature_b = eth_sign_abi(
-            &auth.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-            &auth.auth_in.request_id,
-            &self.conf.signing_key,
-        );
+        // new signer requires id_key_salt and sign_msg not None
+        if auth.auth_in.sign_msg.is_none() {
+            error("sign_msg must not be none");
+            return Err(GenericError::from("invalid request missing sign_msg"));
+        }
+        // generate new user private key and public key
+        let id_priv_key = derive_priv_k(&self.conf.signing_key, auth.auth_in.id_key_salt, auth.account.acc_and_type_hash);
+        let id_pub_key = derivce_pub_k(&id_priv_key);
+        let signature_b = eth_sign_abi(&auth.auth_in.sign_msg, id_priv_key);
         if auth.auth_in.user_key.as_ref().is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
                 &signature_b
             ));
-            Ok(EthSigned::new(auth.to_eth_auth(), &signature_b, None).to_json_bytes())
+            Ok(ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, None).to_json_bytes())
         } else if auth.auth_in.user_key.as_ref().unwrap().eq("") {
             info("user key is empty, generate key");
             let user_key = sgx_utils::rand_bytes();
@@ -235,7 +239,7 @@ impl SignerAgent for ProofSignerAgent {
                 user_key_signature: Some(user_key_signed_hex),
             };
             Ok(
-                EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
+                ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, Some(user_key_store))
                     .to_json_bytes(),
             )
         } else if auth.auth_in.user_key.as_ref().is_some()
@@ -263,11 +267,11 @@ impl SignerAgent for ProofSignerAgent {
                     user_key_signature: None,
                 };
                 Ok(
-                    EthSigned::new(auth.to_eth_auth(), &signature_b, Some(user_key_store))
+                    ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, Some(user_key_store))
                         .to_json_bytes(),
                 )
             } else {
-                Ok(EthSigned::new(auth.to_eth_auth(), &signature_b, None).to_json_bytes())
+                Ok(ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, None).to_json_bytes())
             }
         } else {
             Err(GenericError::from("invalid request"))
@@ -275,10 +279,25 @@ impl SignerAgent for ProofSignerAgent {
     }
 }
 
+fn derive_priv_k(priv_k: ) -> {
+    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap(); 
+    let dk1 = derive_xprv(&s, "m/0/2147483647'/1/2147483646'");
+                //let dk2 = derive_xprv(&s, "m/0/eee'/1/bbb123'");
+                //    println!("dk1 {:?}", &*dk1.to_string(Prefix::XPRV));
+                //        //print!("dk2 {}", &*dk2.to_string(Prefix::XPRV));
+                //
+                //            sgx_status_t::SGX_SUCCESS
+                //
+}
+
+fn derive_pub_k() -> {
+}
+
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct BothSignature {
     jwt: String,
-    proof: EthSigned,
+    proof: ProofSigned,
 }
 
 impl ToJsonBytes for BothSignature {}
@@ -288,7 +307,7 @@ impl SignerAgent for BothSignerAgent {
         let jwt = self.jwt.sign(&auth)?;
         let proof = self.proof.sign(&auth)?;
         let jwt_token = std::str::from_utf8(&jwt)?;
-        let proof_obj: EthSigned = serde_json::from_slice(&proof)?;
+        let proof_obj: ProofSigned = serde_json::from_slice(&proof)?;
         Ok(BothSignature {
             jwt: jwt_token.to_string(),
             proof: proof_obj,
@@ -297,25 +316,19 @@ impl SignerAgent for BothSignerAgent {
     }
 }
 
-fn eth_sign_abi(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
-    let prv_k_b = decode_hex(prv_k).unwrap();
-    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
+fn eth_sign_abi(msg: &str, prv_k: &[u8]) -> Vec<u8> {
+    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k).unwrap();
 
-    info(&format!("sign raw parts: {} {}", account, request_id));
-    let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
-    // when request_id is hash encoded, decode; else hash it.
-    let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
+    info(&format!("sign msg: {}", msg));
+    // when msg is hash encoded, decode; else hash it.
+    let msg_hash: [u8; 32] = match try_decode_hex(msg) {
         Ok(r) => r,
         Err(e) => {
-            error(&format!("request_id is not hash encoded: {}", e));
-            eth_hash(request_id.as_bytes())
+            error(&format!("sign_msg is not hash encoded: {}", e));
+            eth_hash(msg.as_bytes())
         }
     };
-    let abi_encoded = abi_combine(&account_hash, &request_id_hash);
-    info(&format!("abi encode is {:?}", &abi_encoded));
-    let abi_hash = eth_hash(&abi_encoded);
-    info(&format!("abi hash is {:?}", &abi_hash));
-    let msg_to_sign = eth_message_b(&abi_hash);
+    let msg_to_sign = eth_message_b(&msg_hash);
     info(&format!("msg to sign is {:?}", &msg_to_sign));
     let message = libsecp256k1::Message::parse_slice(&msg_to_sign).unwrap();
     let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
@@ -340,13 +353,6 @@ pub fn eth_hash(b: &[u8]) -> [u8; 32] {
     hasher.update(&b);
     hasher.finalize(&mut output);
     output
-}
-
-fn abi_combine(account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
-    let mut abi_all = Vec::with_capacity(2 * 32);
-    abi_all.extend_from_slice(account_abi);
-    abi_all.extend_from_slice(request_id_abi);
-    abi_all
 }
 
 fn pad_length_string(s: &str) -> Vec<u8> {
