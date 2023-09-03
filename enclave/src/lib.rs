@@ -13,11 +13,11 @@ extern crate tiny_keccak;
 #[macro_use]
 extern crate sgx_tstd as std;
 extern crate base64;
+extern crate bip32;
 extern crate http_req;
 extern crate serde;
 extern crate serde_json;
 extern crate sgx_rand;
-extern crate bip32;
 
 #[macro_use]
 extern crate serde_cbor;
@@ -38,10 +38,9 @@ use std::string::{String, ToString};
 use std::sync::{Once, SgxMutex};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
+use bip32::{Prefix, XPrv};
 use std::ptr;
 use std::str;
-use bip32::{Prefix, XPrv};
-
 
 pub mod auth;
 pub mod config;
@@ -373,17 +372,13 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
     println!("running ec_test");
-    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap(); 
+    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap();
     let dk1 = derive_xprv(&s, "m/0/2147483647'/1/2147483646'");
     //let dk2 = derive_xprv(&s, "m/0/eee'/1/bbb123'");
     println!("dk1 {:?}", &*dk1.to_string(Prefix::XPRV));
     //print!("dk2 {}", &*dk2.to_string(Prefix::XPRV));
 
     sgx_status_t::SGX_SUCCESS
-}
-
-fn derive_xprv(seed: &[u8], path: &str) -> XPrv {
-    XPrv::derive_from_path(seed, &path.parse().unwrap()).unwrap()
 }
 
 #[no_mangle]

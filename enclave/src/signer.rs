@@ -210,15 +210,22 @@ impl SignerAgent for ProofSignerAgent {
             return Err(GenericError::from("invalid request missing sign_msg"));
         }
         // generate new user private key and public key
-        let id_priv_key = derive_priv_k(&self.conf.signing_key, auth.auth_in.id_key_salt, auth.account.acc_and_type_hash);
-        let id_pub_key = derivce_pub_k(&id_priv_key);
+        let (id_priv_key, id_pub_key) = derive_key(
+            &self.conf.signing_key,
+            auth.auth_in.id_key_salt,
+            auth.account.acc_and_type_hash,
+        )?;
+        let id_pub_key_hex = encode_hex(id_pub_key);
         let signature_b = eth_sign_abi(&auth.auth_in.sign_msg, id_priv_key);
         if auth.auth_in.user_key.as_ref().is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
                 &signature_b
             ));
-            Ok(ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, None).to_json_bytes())
+            Ok(
+                ProofSigned::new(auth.to_proof_auth(id_pub_key_hex), &signature_b, None)
+                    .to_json_bytes(),
+            )
         } else if auth.auth_in.user_key.as_ref().unwrap().eq("") {
             info("user key is empty, generate key");
             let user_key = sgx_utils::rand_bytes();
@@ -238,10 +245,12 @@ impl SignerAgent for ProofSignerAgent {
                 user_key: Some(user_key_sealed_hex),
                 user_key_signature: Some(user_key_signed_hex),
             };
-            Ok(
-                ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, Some(user_key_store))
-                    .to_json_bytes(),
+            Ok(ProofSigned::new(
+                auth.to_proof_auth(id_pub_key_hex),
+                &signature_b,
+                Some(user_key_store),
             )
+            .to_json_bytes())
         } else if auth.auth_in.user_key.as_ref().is_some()
             && auth.auth_in.user_key_signature.as_ref().is_some()
         {
@@ -266,12 +275,17 @@ impl SignerAgent for ProofSignerAgent {
                     user_key: None,
                     user_key_signature: None,
                 };
+                Ok(ProofSigned::new(
+                    auth.to_proof_auth(id_pub_key_hex),
+                    &signature_b,
+                    Some(user_key_store),
+                )
+                .to_json_bytes())
+            } else {
                 Ok(
-                    ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, Some(user_key_store))
+                    ProofSigned::new(auth.to_proof_auth(id_pub_key_hex), &signature_b, None)
                         .to_json_bytes(),
                 )
-            } else {
-                Ok(ProofSigned::new(auth.to_proof_auth(id_pub_key), &signature_b, None).to_json_bytes())
             }
         } else {
             Err(GenericError::from("invalid request"))
@@ -279,20 +293,32 @@ impl SignerAgent for ProofSignerAgent {
     }
 }
 
-fn derive_priv_k(priv_k: ) -> {
-    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap(); 
-    let dk1 = derive_xprv(&s, "m/0/2147483647'/1/2147483646'");
-                //let dk2 = derive_xprv(&s, "m/0/eee'/1/bbb123'");
-                //    println!("dk1 {:?}", &*dk1.to_string(Prefix::XPRV));
-                //        //print!("dk2 {}", &*dk2.to_string(Prefix::XPRV));
-                //
-                //            sgx_status_t::SGX_SUCCESS
-                //
+fn derive_key(
+    priv_k: &str,
+    account_hash: &str,
+    salt_index: i32,
+) -> GenericResult<([u8; 32], [u8; 33])> {
+    let master_k = decode_hex(priv_k).unwrap();
+    let account_index = str_to_i32(account_hash);
+    println!("account i32 is {}", account_index);
+    let derive_path = format!("m/0/{}/{}", account_index, salt_index);
+    let dpk = derive_xprv(&s, &derive_path)?;
+    let priv_kb = dpk.to_bytes();
+    let pub_k = dpk.public_key();
+    (priv_kb, pub_k.to_bytes())
 }
 
-fn derive_pub_k() -> {
+fn derive_xprv(seed: &[u8], path: &str) -> GenericResult<XPrv> {
+    let p = path.parse()?;
+    XPrv::derive_from_path(seed, p)?
 }
 
+fn str_to_i32(data_hash: &str) -> i32 {
+    let bytes = decode_hex(data_hash).unwrap();
+    let mut buf = [0_u8; 4];
+    buf.copy_from_slice(&bytes[0..4]);
+    i32::from_be_bytes(buf)
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct BothSignature {
