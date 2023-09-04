@@ -89,34 +89,6 @@ impl Auth for AuthService {
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        // if sign_mode proof, decrypt cipher_id_key_salt and cipher_sign_msg
-        let id_key_salt_str = match decrypt_text(&req.cipher_id_key_salt, &session) {
-            Ok(r) => r,
-            Err(err) => {
-                error("decrypt id_key_salt failed.");
-                return Err(Error::new(ErrorKind::DataError));
-            }
-        };
-        let id_key_salt: u32 = match str::parse<u32>(&id_key_salt_str) {
-            Ok(r) => {
-                info(&format!("id_key_salt {}", r));
-                r
-            },
-            Err(err) => {
-                error("parse id_key_salt failed.");
-                return Err(Error::new(ErrorKind::DataError));
-            }
-        };
-        let sign_msg = decrypt_text(&req.cipher_sign_msg, &session) {
-            Ok(r) => {
-                info(&format("sign_msg {}", r));
-                r
-            },
-            Err(err) => {
-                error(&format!("decrypt sign_msg failed."));
-                return Err(Error::new(ErrorKind::DataError));
-            }
-        };
         // get account when auth success
         let result: Result<InnerAccount, Error> = match req.id_type {
             IdType::Mailto | IdType::Tel => {

@@ -40,6 +40,30 @@ pub struct ProofAuth {
     pub id_pub_key: String,
 }
 
+#[derive(Debug, Serialize)]
+struct JwtFbClaims {
+    alg: String,
+    sub: String,
+    iss: String,
+    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
+    iat: u64,
+    exp: u64,
+    uid: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JwtClaims {
+    alg: String,
+    sub: String,
+    acc_and_type_hash: String,
+    idtype: String,
+    iss: String,
+    aud: String, // client id
+    iat: u64,
+    exp: u64,
+}
+
+
 impl<'a> InnerAuth<'a> {
     fn to_proof_auth(&self, pub_k: String) -> ProofAuth {
         match self.auth_in.account_plain {
@@ -105,28 +129,6 @@ impl<'a> InnerAuth<'a> {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct JwtFbClaims {
-    alg: String,
-    sub: String,
-    iss: String,
-    aud: String, // hard code to "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit"
-    iat: u64,
-    exp: u64,
-    uid: String,
-}
-
-#[derive(Debug, Serialize)]
-struct JwtClaims {
-    alg: String,
-    sub: String,
-    acc_and_type_hash: String,
-    idtype: String,
-    iss: String,
-    aud: String, // client id
-    iat: u64,
-    exp: u64,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofSigned {
@@ -212,6 +214,34 @@ impl SignerAgent for ProofSignerAgent {
         }
         let cipher_id_key_salt = auth.auth.cipher_id_key_salt.unwrap();
         let cipher_sign_msg = auth.auth.cipher_sign_msg.unwrap();
+        // if sign_mode proof, decrypt cipher_id_key_salt and cipher_sign_msg
+        let id_key_salt_str = match decrypt_text(cipher_id_key_salt, &session) {
+            Ok(r) => r,
+            Err(err) => {
+                error("decrypt id_key_salt failed.");
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
+        let id_key_salt: u32 = match str::parse<u32>(&id_key_salt_str) {
+            Ok(r) => {
+                info(&format!("id_key_salt {}", r));
+                r
+            },
+            Err(err) => {
+                error("parse id_key_salt failed.");
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
+        let sign_msg = decrypt_text(cipher_sign_msg, &session) {
+            Ok(r) => {
+                info(&format("sign_msg {}", r));
+                r
+            },
+            Err(err) => {
+                error(&format!("decrypt sign_msg failed."));
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
 
         // generate new user private key and public key
         let account_hash = match &auth.account.acc_and_type_hash {
@@ -224,10 +254,10 @@ impl SignerAgent for ProofSignerAgent {
         let (id_priv_key, id_pub_key) = derive_key(
             &self.conf.signing_key,
             &account_hash,
-            auth.auth_in.id_key_salt,
+            id_key_salt,
         )?;
         let id_pub_key_hex = encode_hex(&id_pub_key);
-        let signature_b = eth_sign_abi(&auth.auth_in.sign_msg, &id_priv_key);
+        let signature_b = eth_sign_abi(&sign_msg, &id_priv_key);
         if auth.auth_in.user_key.as_ref().is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
