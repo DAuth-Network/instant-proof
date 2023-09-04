@@ -133,8 +133,8 @@ pub struct AuthIn {
     pub cipher_code: String,
     pub client: Client,
     pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
-    pub id_key_salt: u32, // default Proof
-    pub sign_msg: String, // default Proof
+    pub cipher_id_key_salt: Option<String>, // default Proof
+    pub cipher_sign_msg: Option<String>, // default Proof
     pub sign_mode: SignMode, // default Proof
     pub account_plain: Option<bool>,
     pub user_key: Option<String>,
