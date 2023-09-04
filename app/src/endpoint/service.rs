@@ -173,7 +173,7 @@ pub struct AuthInOneReq {
     session_id: String,
     cipher_code: String,
     id_type: IdType,
-    id_key_salt: i32,
+    id_key_salt: u32,
     sign_msg: String,
     sign_mode: Option<SignMode>, // default proof, or JWT
     account_plain: Option<bool>,

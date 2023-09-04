@@ -57,7 +57,7 @@ pub struct AuthIn<'a> {
     pub cipher_code: &'a str,
     pub client: &'a Client,
     pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
-    pub id_key_salt: i32,
+    pub id_key_salt: u32,
     pub sign_msg: &'a str,
     pub sign_mode: SignMode, // default Proof
     pub account_plain: &'a Option<bool>,

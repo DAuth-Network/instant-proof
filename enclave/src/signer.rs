@@ -299,11 +299,11 @@ impl SignerAgent for ProofSignerAgent {
 fn derive_key(
     priv_k: &str,
     account_hash: &str,
-    salt_index: i32,
+    salt_index: u32,
 ) -> GenericResult<([u8; 32], [u8; 33])> {
     let master_k = decode_hex(priv_k).unwrap();
-    let account_index = str_to_i32(account_hash);
-    println!("account i32 is {}", account_index);
+    let account_index = str_to_u32(account_hash);
+    println!("account u32 is {}", account_index);
     let derive_path = format!("m/0/{}/{}", account_index, salt_index);
     let dpk = derive_xprv(&master_k, &derive_path)?;
     let priv_kb = dpk.to_bytes();
@@ -328,11 +328,11 @@ fn derive_xprv(seed: &[u8], path: &str) -> GenericResult<XPrv> {
     }
 }
 
-fn str_to_i32(data_hash: &str) -> i32 {
+fn str_to_u32(data_hash: &str) -> u32 {
     let bytes = decode_hex(data_hash).unwrap();
     let mut buf = [0_u8; 4];
     buf.copy_from_slice(&bytes[0..4]);
-    i32::from_be_bytes(buf)
+    u32::from_be_bytes(buf)
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
