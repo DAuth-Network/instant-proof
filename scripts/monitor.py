@@ -11,7 +11,7 @@ def send_alert(cfg, errors):
     server.login(cfg['otp']['email']['account'],
                  cfg['otp']['email']['password'])
     from_account = cfg['otp']['email']['sender']
-    to_accounts = cfg['alerts']
+    to_accounts = cfg['alerts']['mail']
     msg = format_msg(from_account, to_accounts, errors)
     print(msg)
     server.sendmail(
