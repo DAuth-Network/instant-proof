@@ -4,6 +4,7 @@ from smtplib import SMTP_SSL
 import toml
 import pathlib
 import datetime
+import socket
 
 
 def send_alert(cfg, errors):
@@ -86,7 +87,8 @@ def monitor_app_port(api_conf):
         if 'LISTEN' in l and f'{ip}:{port}' == l.split()[3]:
             return []
     f_path = pathlib.Path(__file__).parent.resolve()
-    return [f'Port {port} is not listening, {f_path} process is down.']
+    hostname = socket.gethostname()
+    return [f'{hostname}:{port} is not listening, {f_path} process is down.']
 
 
 def monitor_status(conf):
