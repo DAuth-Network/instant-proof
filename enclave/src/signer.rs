@@ -3,6 +3,7 @@ use crate::get_config_seal_key;
 use super::config;
 use super::err::*;
 use super::log::*;
+use super::*;
 use super::model::*;
 use super::os_utils::*;
 use super::sgx_utils;
@@ -208,21 +209,21 @@ impl SignerAgent for JwtFbSignerAgent {
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
         // verify id_key_salt and sign_msg presence
-        if auth.auth.cipher_id_key_sault.is_none() or auth.auth.cipher_sign_msg.is_none() {
+        if auth.auth_in.cipher_id_key_salt.is_none() || auth.auth_in.cipher_sign_msg.is_none() {
             error("id_key_salt and sign_msg must not be none");
             return Err(GenericError::from("invalid request"));
         }
-        let cipher_id_key_salt = auth.auth.cipher_id_key_salt.unwrap();
-        let cipher_sign_msg = auth.auth.cipher_sign_msg.unwrap();
+        let cipher_id_key_salt = auth.auth_in.cipher_id_key_salt.unwrap();
+        let cipher_sign_msg = auth.auth_in.cipher_sign_msg.unwrap();
         // if sign_mode proof, decrypt cipher_id_key_salt and cipher_sign_msg
-        let id_key_salt_str = match decrypt_text(cipher_id_key_salt, &session) {
+        let id_key_salt_str = match decrypt_text(&cipher_id_key_salt, &session) {
             Ok(r) => r,
             Err(err) => {
                 error("decrypt id_key_salt failed.");
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        let id_key_salt: u32 = match str::parse<u32>(&id_key_salt_str) {
+        let id_key_salt: u32 = match str::parse::<u32>(&id_key_salt_str) {
             Ok(r) => {
                 info(&format!("id_key_salt {}", r));
                 r
@@ -232,9 +233,9 @@ impl SignerAgent for ProofSignerAgent {
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        let sign_msg = decrypt_text(cipher_sign_msg, &session) {
+        let sign_msg = match decrypt_text(&cipher_sign_msg, &session) {
             Ok(r) => {
-                info(&format("sign_msg {}", r));
+                info(&format!("sign_msg {}", r));
                 r
             },
             Err(err) => {

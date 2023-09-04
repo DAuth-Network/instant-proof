@@ -81,7 +81,7 @@ impl Auth for AuthService {
         // decrypt code
         let code = match decrypt_text(&req.cipher_code, &session) {
             Ok(r) => {
-                info(&format!("auth code is {}", &code));
+                info(&format!("auth code is {}", &r));
                 r
             }
             Err(err) => {
