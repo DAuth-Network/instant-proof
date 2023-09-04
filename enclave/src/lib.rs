@@ -243,7 +243,7 @@ pub extern "C" fn ec_send_otp(
     sgx_status_t::SGX_SUCCESS
 }
 
-fn decrypt_text_to_text(cipher_text: &str, session: &Session) -> Result<String, Error> {
+fn decrypt_text(cipher_text: &str, session: &Session) -> Result<String, Error> {
     let cipher_text_b_r = decode_hex(cipher_text);
     if cipher_text_b_r.is_err() {
         error("decode account failed");

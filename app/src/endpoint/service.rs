@@ -211,7 +211,7 @@ pub async fn auth_in_one(
         cipher_code: &req.cipher_code,
         client: &client,
         id_type: req.id_type,
-        cipher_id_key_salt: req.cipher_id_key_salt,
+        cipher_id_key_salt: &req.cipher_id_key_salt,
         cipher_sign_msg: &req.cipher_sign_msg,
         sign_mode: sign_mode,
         account_plain: &req.account_plain,

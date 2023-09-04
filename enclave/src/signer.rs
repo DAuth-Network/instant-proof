@@ -205,6 +205,14 @@ impl SignerAgent for JwtFbSignerAgent {
 
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+        // verify id_key_salt and sign_msg presence
+        if auth.auth.cipher_id_key_sault.is_none() or auth.auth.cipher_sign_msg.is_none() {
+            error("id_key_salt and sign_msg must not be none");
+            return Err(GenericError::from("invalid request"));
+        }
+        let cipher_id_key_salt = auth.auth.cipher_id_key_salt.unwrap();
+        let cipher_sign_msg = auth.auth.cipher_sign_msg.unwrap();
+
         // generate new user private key and public key
         let account_hash = match &auth.account.acc_and_type_hash {
             Some(r) => r,

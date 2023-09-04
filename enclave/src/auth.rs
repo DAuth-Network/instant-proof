@@ -30,7 +30,7 @@ impl Auth for AuthService {
             return Err(Error::new(ErrorKind::SessionError));
         }
         // decrypt account
-        let account = match decrypt_text_to_text(&req.cipher_account, &session) {
+        let account = match decrypt_text(&req.cipher_account, &session) {
             Ok(r) => r,
             Err(err) => {
                 error(&format!("decrypt opt account failed."));
@@ -107,7 +107,7 @@ impl Auth for AuthService {
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        let sign_msg = decrypt_text_to_text(&req.cipher_sign_msg, &session) {
+        let sign_msg = decrypt_text(&req.cipher_sign_msg, &session) {
             Ok(r) => {
                 info(&format("sign_msg {}", r));
                 r
