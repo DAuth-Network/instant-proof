@@ -229,7 +229,7 @@ pub extern "C" fn ec_send_otp(
 ) -> sgx_status_t {
     info("sgx send otp");
     let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
-    let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
+    let req: AuthIn = serde_json::from_slice(req_slice).unwrap();
     let result = config(None).inner.dauth.send_otp(&req);
     if result.is_err() {
         unsafe {

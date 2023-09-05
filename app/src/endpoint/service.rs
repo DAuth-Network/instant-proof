@@ -127,17 +127,16 @@ pub async fn exchange_key(
 }
 
 #[derive(Deserialize)]
-pub struct AuthOtpReq {
+pub struct AuthReq {
     client_id: String,
     session_id: String,
-    cipher_account: String,
-    id_type: IdType,
+    cipher_data: String,
 }
 
 // with BaseResp
 #[post("/send_otp")]
 pub async fn send_otp(
-    req: web::Json<AuthOtpReq>,
+    req: web::Json<AuthReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -155,10 +154,9 @@ pub async fn send_otp(
     }
     let client = client_o.unwrap();
     let tee = &endex.tee;
-    let auth_otp_in = OtpIn {
+    let auth_otp_in = AuthIn {
         session_id: &req.session_id,
-        cipher_account: &req.cipher_account,
-        id_type: req.id_type,
+        cipher_data: &req.cipher_data,
         client: &client,
     };
     match tee.send_otp(auth_otp_in) {
@@ -167,23 +165,9 @@ pub async fn send_otp(
     }
 }
 
-#[derive(Deserialize)]
-pub struct AuthInOneReq {
-    client_id: String,
-    session_id: String,
-    cipher_code: String,
-    id_type: IdType,
-    cipher_id_key_salt: Option<String>,
-    cipher_sign_msg: Option<String>,
-    sign_mode: Option<SignMode>, // default proof, or JWT
-    account_plain: Option<bool>,
-    user_key: Option<String>,
-    user_key_signature: Option<String>,
-}
-
 #[post("/auth_in_one")]
 pub async fn auth_in_one(
-    req: web::Json<AuthInOneReq>,
+    req: web::Json<AuthReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -208,15 +192,8 @@ pub async fn auth_in_one(
     };
     let auth_in = AuthIn {
         session_id: &req.session_id,
-        cipher_code: &req.cipher_code,
-        client: &client,
-        id_type: req.id_type,
-        cipher_id_key_salt: &req.cipher_id_key_salt,
-        cipher_sign_msg: &req.cipher_sign_msg,
-        sign_mode: sign_mode,
-        account_plain: &req.account_plain,
-        user_key: &req.user_key,
-        user_key_signature: &req.user_key_signature,
+        cipher_data: &req.cipher_data,
+        client: &client
     };
     let auth_result = tee.auth_in_one(auth_in);
     if auth_result.is_err() {

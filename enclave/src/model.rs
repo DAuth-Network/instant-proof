@@ -120,21 +120,24 @@ impl InnerAccount {
 pub struct AuthService {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OtpIn {
+pub struct AuthIn {
     pub session_id: String,
-    pub cipher_account: String,
+    pub cipher_data: String,
     pub client: Client,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtpData {
+    pub account: String,
     pub id_type: IdType,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AuthIn {
-    pub session_id: String,
-    pub cipher_code: String,
-    pub client: Client,
+pub struct AuthData {
+    pub code: String,
     pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
-    pub cipher_id_key_salt: Option<String>, // default Proof
-    pub cipher_sign_msg: Option<String>, // default Proof
+    pub id_key_salt: Option<String>, // default Proof
+    pub sign_msg: Option<String>, // default Proof
     pub sign_mode: SignMode, // default Proof
     pub account_plain: Option<bool>,
     pub user_key: Option<String>,

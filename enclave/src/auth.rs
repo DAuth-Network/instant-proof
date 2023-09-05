@@ -6,16 +6,17 @@ use super::sgx_utils;
 use super::signer::*;
 use super::*;
 
+use serde_json::from_str;
 use std::result::Result;
 use std::vec::Vec;
 
 pub trait Auth {
-    fn send_otp(&self, otp_in: &OtpIn) -> Result<(), Error>;
+    fn send_otp(&self, otp_in: &AuthIn) -> Result<(), Error>;
     fn auth_in_one(&self, otp_confirm_in: &AuthIn) -> Result<(InnerAccount, Vec<u8>), Error>;
 }
 
 impl Auth for AuthService {
-    fn send_otp(&self, req: &OtpIn) -> Result<(), Error> {
+    fn send_otp(&self, req: &AuthIn) -> Result<(), Error> {
         // verify session
         let mut session = match get_session(&req.session_id) {
             Some(s) => s,
@@ -29,19 +30,26 @@ impl Auth for AuthService {
             ec_close_session(&req.session_id);
             return Err(Error::new(ErrorKind::SessionError));
         }
-        // decrypt account
-        let account = match decrypt_text(&req.cipher_account, &session) {
+        // decrypt otp data
+        let otp_str = match decrypt_text(&req.cipher_data, &session) {
             Ok(r) => r,
             Err(err) => {
-                error(&format!("decrypt opt account failed."));
+                error(&format!("decrypt opt data failed."));
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        info(&format!("otp account is {}", account));
+        let otp_data = match serde_json::from_str::<OtpData>(&otp_str) {
+            Ok(r) => r,
+            Err(err) => {
+                error(&format!("parse otp data failed: {}", err));
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
+        info(&format!("otp account is {}", otp_data.account));
         let otp = sgx_utils::rand().to_string();
         //TODO: sendmail error
         // get otp_client and send mail
-        let otp_client = match otp::get_otp_client(req.id_type) {
+        let otp_client = match otp::get_otp_client(otp_data.id_type) {
             Some(r) => r,
             None => {
                 error("id type not found");
@@ -49,7 +57,7 @@ impl Auth for AuthService {
             }
         };
         // send otp
-        match otp_client.send_otp(&account, &req.client, &otp) {
+        match otp_client.send_otp(&otp_data.account, &req.client, &otp) {
             Ok(_) => {}
             Err(err) => {
                 error(&format!("send otp failed: {}", err));
@@ -58,7 +66,7 @@ impl Auth for AuthService {
         }
         // update session
         session.code = otp;
-        let inner_account = InnerAccount::build(account, req.id_type);
+        let inner_account = InnerAccount::build(otp_data.account, otp_data.id_type);
         session.data = inner_account;
         update_session(&req.session_id, &session);
         Ok(())
@@ -79,7 +87,7 @@ impl Auth for AuthService {
             return Err(Error::new(ErrorKind::SessionError));
         }
         // decrypt code
-        let code = match decrypt_text(&req.cipher_code, &session) {
+        let auth_data_str = match decrypt_text(&req.cipher_code, &session) {
             Ok(r) => {
                 info(&format!("auth code is {}", &r));
                 r
@@ -89,11 +97,18 @@ impl Auth for AuthService {
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
+        let auth_data = match serde_json::from_str::<AuthData>(&auth_data_str) {
+            Ok(r) => r,
+            Err(err) => {
+                error(&format!("parse auth data failed: {}", err));
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
         // get account when auth success
-        let result: Result<InnerAccount, Error> = match req.id_type {
+        let result: Result<InnerAccount, Error> = match auth_data.id_type {
             IdType::Mailto | IdType::Tel => {
                 // when id_type is mailto or tel, code equal -> auth success
-                if !code.eq(&session.code) {
+                if !auth_data.code.eq(&session.code) {
                     info("confirm code not match, returning");
                     Err(Error::new(ErrorKind::OtpCodeError))
                 } else {
@@ -102,8 +117,8 @@ impl Auth for AuthService {
             }
             _ => {
                 // when id_type is others, oauth success -> auth success
-                match oauth::get_oauth_client(req.id_type) {
-                    Some(r) => match r.oauth(&code, &req.client.client_redirect_url) {
+                match oauth::get_oauth_client(auth_data.id_type) {
+                    Some(r) => match r.oauth(&auth_data.code, &req.client.client_redirect_url) {
                         Ok(n) => Ok(n),
                         Err(e) => {
                             error(&format!("oauth failed {:?}", e));
@@ -132,7 +147,8 @@ impl Auth for AuthService {
         // sign the auth
         let auth = InnerAuth {
             account: &account,
-            auth_in: &req,
+            auth_data: &auth_data,
+            client: &req.client,
         };
         let signer = get_signer(&req.sign_mode);
         let dauth_signed = signer.sign(&auth).unwrap();

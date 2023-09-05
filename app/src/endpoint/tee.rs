@@ -12,8 +12,8 @@ use sgx_types::*;
 use sgx_urts::SgxEnclave;
 pub trait TeeAuth {
     fn exchange_key(&self, exk_in: ExchangeKeyIn) -> Result<ExchangeKeyOut, Error>;
-    fn send_otp(&self, otp_in: OtpIn) -> Result<(), Error>;
-    fn auth_in_one(&self, otp_confirm_in: AuthIn) -> Result<AuthOut, Error>;
+    fn send_otp(&self, otp_in: AuthIn) -> Result<(), Error>;
+    fn auth_in_one(&self, auth_in: AuthIn) -> Result<AuthOut, Error>;
 }
 
 #[derive(Debug)]
@@ -43,26 +43,10 @@ pub struct ExchangeKeyOut {
 
 /// Exchange Key Request includes a user public key for secure channel
 #[derive(Debug, Serialize)]
-pub struct OtpIn<'a> {
-    pub session_id: &'a str,
-    pub cipher_account: &'a str,
-    pub id_type: IdType,
-    pub client: &'a Client,
-}
-
-/// Exchange Key Request includes a user public key for secure channel
-#[derive(Debug, Serialize)]
 pub struct AuthIn<'a> {
     pub session_id: &'a str,
-    pub cipher_code: &'a str,
+    pub cipher_data: &'a str,
     pub client: &'a Client,
-    pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
-    pub cipher_id_key_salt: &'a Option<String>,
-    pub cipher_sign_msg: &'a Option<String>,
-    pub sign_mode: SignMode, // default Proof
-    pub account_plain: &'a Option<bool>,
-    pub user_key: &'a Option<String>,
-    pub user_key_signature: &'a Option<String>,
 }
 
 /// Exchange Key Request includes a user public key for secure channel
@@ -106,8 +90,8 @@ impl TeeAuth for TeeService {
         })
     }
 
-    fn send_otp(&self, otp_in: OtpIn) -> Result<(), Error> {
-        let in_b = serde_json::to_vec(&otp_in).map_err(|err| {
+    fn send_otp(&self, auth_in: AuthIn) -> Result<(), Error> {
+        let auth_in_b = serde_json::to_vec(&auth_in).map_err(|err| {
             error!("auth_otp request to bytes failed, {}", err);
             Error::new(ErrorKind::DataError)
         })?;
@@ -118,8 +102,8 @@ impl TeeAuth for TeeService {
             ecall::ec_send_otp(
                 self.enclave.geteid(),
                 &mut sgx_result,
-                in_b.as_ptr() as *const u8,
-                in_b.len(),
+                auth_in_b.as_ptr() as *const u8,
+                auth_in_b.len(),
                 &mut error_code,
             )
         });
@@ -139,8 +123,8 @@ impl TeeAuth for TeeService {
         }
     }
 
-    fn auth_in_one(&self, otp_c_in: AuthIn) -> Result<AuthOut, Error> {
-        let auth_req = serde_json::to_vec(&otp_c_in).map_err(|err| {
+    fn auth_in_one(&self, auth_in: AuthIn) -> Result<AuthOut, Error> {
+        let auth_in_b = serde_json::to_vec(&auth_in).map_err(|err| {
             error!("encode client error, {}", err);
             Error::new(ErrorKind::DataError)
         })?;
@@ -155,8 +139,8 @@ impl TeeAuth for TeeService {
             ecall::ec_auth_in_one(
                 self.enclave.geteid(),
                 &mut sgx_result,
-                auth_req.as_ptr() as *const u8,
-                auth_req.len(),
+                auth_in_b.as_ptr() as *const u8,
+                auth_in_b.len(),
                 MAX_LEN,
                 account_b.as_ptr() as *mut u8,
                 &mut account_b_size,

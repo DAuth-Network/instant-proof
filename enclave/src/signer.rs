@@ -3,10 +3,11 @@ use crate::get_config_seal_key;
 use super::config;
 use super::err::*;
 use super::log::*;
-use super::*;
 use super::model::*;
 use super::os_utils::*;
 use super::sgx_utils;
+use super::*;
+use bip32::{DerivationPath, Prefix, XPrv};
 use jsonwebtoken::{
     decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
 };
@@ -15,7 +16,6 @@ use std::convert::TryInto;
 use std::string::*;
 use std::vec::Vec;
 use tiny_keccak::*;
-use bip32::{Prefix, XPrv, DerivationPath};
 
 pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     let conf = &config(None).inner;
@@ -30,7 +30,8 @@ pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
 #[derive(Debug, Clone, Serialize)]
 pub struct InnerAuth<'a> {
     pub account: &'a InnerAccount,
-    pub auth_in: &'a AuthIn,
+    pub auth_data: &'a AuthData,
+    pub client: &'a Client,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -64,10 +65,9 @@ struct JwtClaims {
     exp: u64,
 }
 
-
 impl<'a> InnerAuth<'a> {
     fn to_proof_auth(&self, pub_k: String) -> ProofAuth {
-        match self.auth_in.account_plain {
+        match self.auth_data.account_plain {
             Some(true) => ProofAuth {
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 account_plain: Some(self.account.account.to_string()),
@@ -82,7 +82,7 @@ impl<'a> InnerAuth<'a> {
     }
     fn to_jwt_fb_claim(&self, issuer: &str) -> JwtFbClaims {
         let iat = system_time();
-        match self.auth_in.account_plain {
+        match self.auth_data.account_plain {
             Some(true) => JwtFbClaims {
                 alg: "RS256".to_string(),
                 sub: issuer.to_string(),
@@ -105,14 +105,14 @@ impl<'a> InnerAuth<'a> {
     }
     fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
         let iat = system_time();
-        match self.auth_in.account_plain {
+        match self.auth_data.account_plain {
             Some(true) => JwtClaims {
                 alg: "ES256".to_string(),
                 sub: self.account.account.to_string(),
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
                 iss: issuer.to_string(),
-                aud: self.auth_in.client.client_id.clone(),
+                aud: self.client.client_id.clone(),
                 iat,
                 exp: iat + 3600,
             },
@@ -122,14 +122,13 @@ impl<'a> InnerAuth<'a> {
                 acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
                 idtype: self.account.id_type.to_string(),
                 iss: issuer.to_string(),
-                aud: self.auth_in.client.client_id.clone(),
+                aud: self.client.client_id.clone(),
                 iat,
                 exp: iat + 3600,
             },
         }
     }
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofSigned {
@@ -209,41 +208,22 @@ impl SignerAgent for JwtFbSignerAgent {
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
         // verify id_key_salt and sign_msg presence
-        if auth.auth_in.cipher_id_key_salt.is_none() || auth.auth_in.cipher_sign_msg.is_none() {
+        if auth.auth_data.id_key_salt.is_none() || auth.auth_data.sign_msg.is_none() {
             error("id_key_salt and sign_msg must not be none");
             return Err(GenericError::from("invalid request"));
         }
-        let cipher_id_key_salt = auth.auth_in.cipher_id_key_salt.unwrap();
-        let cipher_sign_msg = auth.auth_in.cipher_sign_msg.unwrap();
-        // if sign_mode proof, decrypt cipher_id_key_salt and cipher_sign_msg
-        let id_key_salt_str = match decrypt_text(&cipher_id_key_salt, &session) {
-            Ok(r) => r,
-            Err(err) => {
-                error("decrypt id_key_salt failed.");
-                return Err(Error::new(ErrorKind::DataError));
-            }
-        };
+        let id_key_salt_str = auth.auth_data.id_key_salt.unwrap();
+        let sign_msg = auth.auth_data.sign_msg.unwrap();
         let id_key_salt: u32 = match str::parse::<u32>(&id_key_salt_str) {
             Ok(r) => {
                 info(&format!("id_key_salt {}", r));
                 r
-            },
+            }
             Err(err) => {
                 error("parse id_key_salt failed.");
                 return Err(Error::new(ErrorKind::DataError));
             }
         };
-        let sign_msg = match decrypt_text(&cipher_sign_msg, &session) {
-            Ok(r) => {
-                info(&format!("sign_msg {}", r));
-                r
-            },
-            Err(err) => {
-                error(&format!("decrypt sign_msg failed."));
-                return Err(Error::new(ErrorKind::DataError));
-            }
-        };
-
         // generate new user private key and public key
         let account_hash = match &auth.account.acc_and_type_hash {
             Some(r) => r,
@@ -252,14 +232,11 @@ impl SignerAgent for ProofSignerAgent {
                 return Err(GenericError::from("invalid request"));
             }
         };
-        let (id_priv_key, id_pub_key) = derive_key(
-            &self.conf.signing_key,
-            &account_hash,
-            id_key_salt,
-        )?;
+        let (id_priv_key, id_pub_key) =
+            derive_key(&self.conf.signing_key, &account_hash, id_key_salt)?;
         let id_pub_key_hex = encode_hex(&id_pub_key);
         let signature_b = eth_sign_abi(&sign_msg, &id_priv_key);
-        if auth.auth_in.user_key.as_ref().is_none() {
+        if auth.auth_data.user_key.as_ref().is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
                 &signature_b
@@ -268,7 +245,7 @@ impl SignerAgent for ProofSignerAgent {
                 ProofSigned::new(auth.to_proof_auth(id_pub_key_hex), &signature_b, None)
                     .to_json_bytes(),
             )
-        } else if auth.auth_in.user_key.as_ref().unwrap().eq("") {
+        } else if auth.auth_data.user_key.as_ref().unwrap().eq("") {
             info("user key is empty, generate key");
             let user_key = sgx_utils::rand_bytes();
 
@@ -293,11 +270,11 @@ impl SignerAgent for ProofSignerAgent {
                 Some(user_key_store),
             )
             .to_json_bytes())
-        } else if auth.auth_in.user_key.as_ref().is_some()
-            && auth.auth_in.user_key_signature.as_ref().is_some()
+        } else if auth.auth_data.user_key.as_ref().is_some()
+            && auth.auth_data.user_key_signature.as_ref().is_some()
         {
-            let user_key_sealed_hex = auth.auth_in.user_key.as_ref().unwrap();
-            let user_key_signature = auth.auth_in.user_key_signature.as_ref().unwrap();
+            let user_key_sealed_hex = auth.auth_data.user_key.as_ref().unwrap();
+            let user_key_signature = auth.auth_data.user_key_signature.as_ref().unwrap();
             let msg_to_sign = format!(
                 "{}:{}",
                 auth.account.acc_and_type_hash.as_ref().unwrap(),
