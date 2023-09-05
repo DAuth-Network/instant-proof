@@ -151,7 +151,13 @@ impl Auth for AuthService {
             client: &req.client,
         };
         let signer = get_signer(&auth_data.sign_mode);
-        let dauth_signed = signer.sign(&auth).unwrap();
+        let dauth_signed = match signer.sign(&auth) {
+            Ok(r) => r,
+            Err(e) => {
+                error(&format!("sign failed {:?}", e));
+                return Err(Error::new(ErrorKind::DataError));
+            }
+        };
         info(&format!("dauth is {:?}", &dauth_signed));
         let cipher_dauth_b = session.encrypt(&dauth_signed);
         info(&format!("cipher dauth is {:?}", &cipher_dauth_b));

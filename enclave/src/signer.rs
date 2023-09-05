@@ -212,19 +212,9 @@ impl SignerAgent for ProofSignerAgent {
             error("id_key_salt and sign_msg must not be none");
             return Err(GenericError::from("invalid request"));
         }
-        let id_key_salt_str = auth.auth_data.id_key_salt.as_ref().unwrap();
+        let id_key_salt = auth.auth_data.id_key_salt.as_ref().unwrap();
         let sign_msg = auth.auth_data.sign_msg.as_ref().unwrap();
-        let id_key_salt: u32 = match str::parse::<u32>(&id_key_salt_str) {
-            Ok(r) => {
-                info(&format!("id_key_salt {}", r));
-                r
-            }
-            Err(err) => {
-                error("parse id_key_salt failed.");
-                return Err(GenericError::from("parse id key salt failed"));
-            }
-        };
-        // generate new user private key and public key
+       // generate new user private key and public key
         let account_hash = match &auth.account.acc_and_type_hash {
             Some(r) => r,
             None => {
@@ -233,7 +223,7 @@ impl SignerAgent for ProofSignerAgent {
             }
         };
         let (id_priv_key, id_pub_key) =
-            derive_key(&self.conf.signing_key, &account_hash, id_key_salt)?;
+            derive_key(&self.conf.signing_key, &account_hash, id_key_salt.clone())?;
         let id_pub_key_hex = encode_hex(&id_pub_key);
         let signature_b = eth_sign_abi(&sign_msg, &id_priv_key);
         if auth.auth_data.user_key.as_ref().is_none() {
@@ -315,12 +305,12 @@ impl SignerAgent for ProofSignerAgent {
 fn derive_key(
     priv_k: &str,
     account_hash: &str,
-    salt_index: u32,
+    salt_index: i32,
 ) -> GenericResult<([u8; 32], [u8; 33])> {
     let master_k = decode_hex(priv_k).unwrap();
-    let account_index = str_to_u32(account_hash);
-    println!("account u32 is {}", account_index);
-    let derive_path = format!("m/0/{}/{}", account_index, salt_index);
+    let account_index = str_to_i32(account_hash);
+    println!("account i32 is {}", account_index);
+    let derive_path = format!("m/0/{}/{}", account_index.abs(), salt_index.abs());
     let dpk = derive_xprv(&master_k, &derive_path)?;
     let priv_kb = dpk.to_bytes();
     let pub_k = dpk.public_key();
@@ -344,11 +334,11 @@ fn derive_xprv(seed: &[u8], path: &str) -> GenericResult<XPrv> {
     }
 }
 
-fn str_to_u32(data_hash: &str) -> u32 {
+fn str_to_i32(data_hash: &str) -> i32 {
     let bytes = decode_hex(data_hash).unwrap();
     let mut buf = [0_u8; 4];
     buf.copy_from_slice(&bytes[0..4]);
-    u32::from_be_bytes(buf)
+    i32::from_be_bytes(buf)
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

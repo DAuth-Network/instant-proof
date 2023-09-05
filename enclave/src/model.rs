@@ -136,7 +136,7 @@ pub struct OtpData {
 pub struct AuthData {
     pub code: String,
     pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
-    pub id_key_salt: Option<String>, // default Proof
+    pub id_key_salt: Option<i32>, // default Proof
     pub sign_msg: Option<String>, // default Proof
     pub sign_mode: SignMode, // default Proof
     pub account_plain: Option<bool>,
