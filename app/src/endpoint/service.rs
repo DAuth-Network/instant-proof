@@ -186,10 +186,6 @@ pub async fn auth_in_one(
     }
     let client = client_o.unwrap();
     let tee = &endex.tee;
-   let sign_mode = match &req.sign_mode {
-        Some(r) => r.to_owned(),
-        None => SignMode::Proof,
-    };
     let auth_in = AuthIn {
         session_id: &req.session_id,
         cipher_data: &req.cipher_data,

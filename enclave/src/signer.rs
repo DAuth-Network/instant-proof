@@ -212,8 +212,8 @@ impl SignerAgent for ProofSignerAgent {
             error("id_key_salt and sign_msg must not be none");
             return Err(GenericError::from("invalid request"));
         }
-        let id_key_salt_str = auth.auth_data.id_key_salt.unwrap();
-        let sign_msg = auth.auth_data.sign_msg.unwrap();
+        let id_key_salt_str = auth.auth_data.id_key_salt.as_ref().unwrap();
+        let sign_msg = auth.auth_data.sign_msg.as_ref().unwrap();
         let id_key_salt: u32 = match str::parse::<u32>(&id_key_salt_str) {
             Ok(r) => {
                 info(&format!("id_key_salt {}", r));
@@ -221,7 +221,7 @@ impl SignerAgent for ProofSignerAgent {
             }
             Err(err) => {
                 error("parse id_key_salt failed.");
-                return Err(Error::new(ErrorKind::DataError));
+                return Err(GenericError::from("parse id key salt failed"));
             }
         };
         // generate new user private key and public key

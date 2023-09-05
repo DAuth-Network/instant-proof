@@ -87,7 +87,7 @@ impl Auth for AuthService {
             return Err(Error::new(ErrorKind::SessionError));
         }
         // decrypt code
-        let auth_data_str = match decrypt_text(&req.cipher_code, &session) {
+        let auth_data_str = match decrypt_text(&req.cipher_data, &session) {
             Ok(r) => {
                 info(&format!("auth code is {}", &r));
                 r
@@ -150,7 +150,7 @@ impl Auth for AuthService {
             auth_data: &auth_data,
             client: &req.client,
         };
-        let signer = get_signer(&req.sign_mode);
+        let signer = get_signer(&auth_data.sign_mode);
         let dauth_signed = signer.sign(&auth).unwrap();
         info(&format!("dauth is {:?}", &dauth_signed));
         let cipher_dauth_b = session.encrypt(&dauth_signed);
