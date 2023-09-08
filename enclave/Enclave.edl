@@ -37,6 +37,23 @@ enclave {
             [out] uint8_t* error_code
         );
 
+        public sgx_status_t ec_send_otp_v1(
+            [in, size=otp_req_size]uint8_t* otp_req,
+            int otp_req_size,
+            [out] uint8_t* error_code            
+        );
+
+        public sgx_status_t ec_auth_in_one_v1(
+            [in, size=auth_req_size]uint8_t* auth_req,
+            int auth_req_size,
+            int max_len,
+            [out, size=max_len]uint8_t* account_b,
+            [out] uint32_t* account_b_size,
+            [out, size=max_len]uint8_t* cipher_dauth,
+            [out] uint32_t* cipher_dauth_size,
+            [out] uint8_t* error_code
+        );
+
 
         public sgx_status_t ec_get_sign_pub_key(
             [out, size=2048]uint8_t* pub_key,

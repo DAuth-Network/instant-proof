@@ -14,6 +14,7 @@ use jsonwebtoken::{
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::string::*;
+use std::thread::AccessError;
 use std::vec::Vec;
 use tiny_keccak::*;
 
@@ -27,23 +28,8 @@ pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct InnerAuth<'a> {
-    pub account: &'a InnerAccount,
-    pub auth_data: &'a AuthData,
-    pub client: &'a Client,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ProofAuth {
-    pub acc_and_type_hash: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub account_plain: Option<String>,
-    pub id_pub_key: String,
-}
-
 #[derive(Debug, Serialize)]
-struct JwtFbClaims {
+pub struct JwtFbClaims {
     alg: String,
     sub: String,
     iss: String,
@@ -54,7 +40,7 @@ struct JwtFbClaims {
 }
 
 #[derive(Debug, Serialize)]
-struct JwtClaims {
+pub struct JwtClaims {
     alg: String,
     sub: String,
     acc_and_type_hash: String,
@@ -65,75 +51,207 @@ struct JwtClaims {
     exp: u64,
 }
 
-impl<'a> InnerAuth<'a> {
-    fn to_proof_auth(&self, pub_k: String) -> ProofAuth {
+pub trait AuthToSign {
+    fn get_account(&self) -> InnerAccount;
+    fn is_account_plain(&self) -> bool;
+    fn get_id_key_salt(&self) -> Option<i32>;
+    fn get_sign_msg(&self) -> Option<String>;
+    fn get_request_id(&self) -> Option<String>;
+    fn get_user_key(&self) -> Option<String>;
+    fn get_user_key_signature(&self) -> Option<String>;
+    fn get_client(&self) -> String;
+    fn to_jwt(&self, issuer: &str) -> Option<JwtClaims>;
+    fn to_jwt_fb(&self, issuer: &str) -> Option<JwtFbClaims>;
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InnerAuth<'a> {
+    pub account: &'a InnerAccount,
+    pub auth_data: &'a AuthData,
+    pub client: &'a Client,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct InnerAuthV1<'a> {
+    pub account: &'a InnerAccount,
+    pub auth_in: &'a AuthInV1,
+}
+
+impl<'a> AuthToSign for InnerAuth<'a> {
+    fn get_account(&self) -> InnerAccount {
+        self.account.clone()
+    }
+    fn is_account_plain(&self) -> bool {
         match self.auth_data.account_plain {
-            Some(true) => ProofAuth {
-                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                account_plain: Some(self.account.account.to_string()),
-                id_pub_key: pub_k,
-            },
-            _ => ProofAuth {
-                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                account_plain: None,
-                id_pub_key: pub_k,
-            },
+            Some(true) => true,
+            _ => false,
         }
     }
-    fn to_jwt_fb_claim(&self, issuer: &str) -> JwtFbClaims {
+    fn get_id_key_salt(&self) -> Option<i32> {
+        self.auth_data.id_key_salt
+    }
+    fn get_sign_msg(&self) -> Option<String> {
+        self.auth_data.sign_msg.clone()
+    }
+    fn get_client(&self) -> String {
+        self.client.client_id.clone()
+    }
+    fn get_request_id(&self) -> Option<String> {
+        None
+    }
+    fn get_user_key(&self) -> Option<String> {
+        self.auth_data.user_key.clone()
+    }
+    fn get_user_key_signature(&self) -> Option<String> {
+        self.auth_data.user_key_signature.clone()
+    }
+    fn to_jwt(&self, issuer: &str) -> Option<JwtClaims> {
         let iat = system_time();
-        match self.auth_data.account_plain {
-            Some(true) => JwtFbClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-                iat,
-                exp: iat + 3600,
-                uid: self.account.account.to_string(),
-            },
-            _ => JwtFbClaims {
-                alg: "RS256".to_string(),
-                sub: issuer.to_string(),
-                iss: issuer.to_string(),
-                aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
-                iat,
-                exp: iat + 3600,
-                uid: self.account.acc_hash.as_ref().unwrap().to_string(),
-            },
+        let account = self.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            return None;
         }
+        let mut claim = JwtClaims {
+            alg: "ES256".to_string(),
+            sub: "".to_string(),
+            acc_and_type_hash: account.acc_and_type_hash.unwrap(),
+            idtype: self.account.id_type.to_string(),
+            iss: issuer.to_string(),
+            aud: self.get_client(),
+            iat,
+            exp: iat + 3600,
+        };
+        match self.is_account_plain() {
+            true => claim.sub = account.account,
+            _ => claim.sub = account.acc_hash.unwrap(),
+        }
+        Some(claim)
     }
-    fn to_jwt_claim(&self, issuer: &str) -> JwtClaims {
+    fn to_jwt_fb(&self, issuer: &str) -> Option<JwtFbClaims> {
         let iat = system_time();
-        match self.auth_data.account_plain {
-            Some(true) => JwtClaims {
-                alg: "ES256".to_string(),
-                sub: self.account.account.to_string(),
-                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                idtype: self.account.id_type.to_string(),
-                iss: issuer.to_string(),
-                aud: self.client.client_id.clone(),
-                iat,
-                exp: iat + 3600,
-            },
-            _ => JwtClaims {
-                alg: "ES256".to_string(),
-                sub: self.account.acc_hash.as_ref().unwrap().to_string(),
-                acc_and_type_hash: self.account.acc_and_type_hash.as_ref().unwrap().to_string(),
-                idtype: self.account.id_type.to_string(),
-                iss: issuer.to_string(),
-                aud: self.client.client_id.clone(),
-                iat,
-                exp: iat + 3600,
-            },
+        let account = self.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            return None;
+        }
+        let mut claims = JwtFbClaims {
+            alg: "RS256".to_string(),
+            sub: issuer.to_string(),
+            iss: issuer.to_string(),
+            aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+            iat,
+            exp: iat + 3600,
+            uid: "".to_string(),
+        };
+        match self.is_account_plain() {
+            true => claims.uid = account.account,
+            _ => claims.uid = account.acc_hash.unwrap(),
+        }
+        Some(claims)
+    }
+}
+
+impl<'a> AuthToSign for InnerAuthV1<'a> {
+    fn get_account(&self) -> InnerAccount {
+        self.account.clone()
+    }
+    fn is_account_plain(&self) -> bool {
+        match self.auth_in.account_plain {
+            Some(true) => true,
+            _ => false,
         }
     }
+    fn get_client(&self) -> String {
+        self.auth_in.client.client_id.clone()
+    }
+    fn get_id_key_salt(&self) -> Option<i32> {
+        None
+    }
+    fn get_request_id(&self) -> Option<String> {
+        Some(self.auth_in.request_id.clone())
+    }
+    fn get_sign_msg(&self) -> Option<String> {
+        None
+    }
+    fn get_user_key(&self) -> Option<String> {
+        self.auth_in.user_key.clone()
+    }
+    fn get_user_key_signature(&self) -> Option<String> {
+        self.auth_in.user_key_signature.clone()
+    }
+    fn to_jwt_fb(&self, issuer: &str) -> Option<JwtFbClaims> {
+        let iat = system_time();
+        let account = self.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            return None;
+        }
+        let mut claims = JwtFbClaims {
+            alg: "RS256".to_string(),
+            sub: issuer.to_string(),
+            iss: issuer.to_string(),
+            aud: "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit".to_string(),
+            iat,
+            exp: iat + 3600,
+            uid: "".to_string(),
+        };
+        match self.is_account_plain() {
+            true => claims.uid = account.account,
+            _ => claims.uid = account.acc_hash.unwrap(),
+        };
+        Some(claims)
+    }
+    fn to_jwt(&self, issuer: &str) -> Option<JwtClaims> {
+        let iat = system_time();
+        let account = self.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            return None;
+        }
+        let mut claims = JwtClaims {
+            alg: "ES256".to_string(),
+            sub: "".to_string(),
+            acc_and_type_hash: account.acc_and_type_hash.unwrap(),
+            idtype: self.account.id_type.to_string(),
+            iss: issuer.to_string(),
+            aud: self.get_client(),
+            iat,
+            exp: iat + 3600,
+        };
+        match self.is_account_plain() {
+            true => claims.sub = account.account,
+            _ => claims.sub = account.acc_hash.unwrap(),
+        }
+        Some(claims)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofAuth {
+    pub acc_and_type_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_plain: Option<String>,
+    pub id_pub_key: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProofAuthV1 {
+    pub acc_and_type_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_plain: Option<String>,
+    pub request_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofSigned {
     /* when id type is email, all account information is available at client, skip auth */
     auth: ProofAuth,
+    signature: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ustore: Option<UserKeyStore>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProofSignedV1 {
+    /* when id type is email, all account information is available at client, skip auth */
+    auth: ProofAuthV1,
     signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     ustore: Option<UserKeyStore>,
@@ -154,6 +272,7 @@ pub struct JwtSigned {
 }
 
 impl ToJsonBytes for ProofSigned {}
+impl ToJsonBytes for ProofSignedV1 {}
 impl ProofSigned {
     pub fn new(auth: ProofAuth, signed: &[u8], ustore: Option<UserKeyStore>) -> Self {
         Self {
@@ -164,8 +283,18 @@ impl ProofSigned {
     }
 }
 
+impl ProofSignedV1 {
+    pub fn new(auth: ProofAuthV1, signed: &[u8], ustore: Option<UserKeyStore>) -> Self {
+        Self {
+            auth: auth,
+            signature: encode_hex(signed),
+            ustore,
+        }
+    }
+}
+
 pub trait SignerAgent {
-    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>>;
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>>;
 }
 
 pub struct JwtSignerAgent {
@@ -180,14 +309,29 @@ pub struct ProofSignerAgent {
     pub conf: config::SignerConf,
 }
 
+pub struct ProofSignerAgentV1 {
+    pub conf: config::SignerConf,
+}
+
 pub struct BothSignerAgent {
     pub jwt: JwtSignerAgent,
     pub proof: ProofSignerAgent,
 }
 
+pub struct BothSignerAgentV1 {
+    pub jwt: JwtSignerAgent,
+    pub proof: ProofSignerAgentV1,
+}
+
 impl SignerAgent for JwtSignerAgent {
-    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
-        let claim = auth.to_jwt_claim(&self.conf.signer);
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
+        let claim = match auth.to_jwt(&self.conf.signer) {
+            Some(r) => r,
+            None => {
+                error("invalid auth");
+                return Err(GenericError::from("invalid auth"));
+            }
+        };
         let pem_key = self.conf.signing_key.as_bytes();
         let key = EncodingKey::from_ec_pem(pem_key)?;
         let token = encode(&Header::new(Algorithm::ES256), &claim, &key)?;
@@ -196,8 +340,14 @@ impl SignerAgent for JwtSignerAgent {
 }
 
 impl SignerAgent for JwtFbSignerAgent {
-    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
-        let claim = auth.to_jwt_fb_claim(&self.conf.signer);
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
+        let claim = match auth.to_jwt_fb(&self.conf.signer) {
+            Some(r) => r,
+            None => {
+                error("invalid auth");
+                return Err(GenericError::from("invalid auth"));
+            }
+        };
         let pem_key = self.conf.signing_key.as_bytes();
         let key = EncodingKey::from_rsa_pem(pem_key)?;
         let token = encode(&Header::new(Algorithm::RS256), &claim, &key)?;
@@ -206,100 +356,165 @@ impl SignerAgent for JwtFbSignerAgent {
 }
 
 impl SignerAgent for ProofSignerAgent {
-    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
         // verify id_key_salt and sign_msg presence
-        if auth.auth_data.id_key_salt.is_none() || auth.auth_data.sign_msg.is_none() {
+        let id_key_salt = auth.get_id_key_salt();
+        let sign_msg = auth.get_sign_msg();
+        if id_key_salt.is_none() || sign_msg.is_none() {
             error("id_key_salt and sign_msg must not be none");
             return Err(GenericError::from("invalid request"));
         }
-        let id_key_salt = auth.auth_data.id_key_salt.as_ref().unwrap();
-        let sign_msg = auth.auth_data.sign_msg.as_ref().unwrap();
-       // generate new user private key and public key
-        let account_hash = match &auth.account.acc_and_type_hash {
-            Some(r) => r,
-            None => {
-                error("acc_and_type_hash must not be none");
-                return Err(GenericError::from("invalid request"));
-            }
-        };
+        let id_key_salt = id_key_salt.as_ref().unwrap();
+        let sign_msg = sign_msg.as_ref().unwrap();
+        // generate new user private key and public key
+        let account = auth.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            error("account hash is none");
+            return Err(GenericError::from("invalid request"));
+        }
+        let acc_hash = account.acc_hash.unwrap();
+        let acc_and_type_hash = account.acc_and_type_hash.unwrap();
         let (id_priv_key, id_pub_key) =
-            derive_key(&self.conf.signing_key, &account_hash, id_key_salt.clone())?;
+            derive_key(&self.conf.signing_key, &acc_hash, id_key_salt.clone())?;
         let id_pub_key_hex = encode_hex(&id_pub_key);
         let signature_b = eth_sign_abi(&sign_msg, &id_priv_key);
-        if auth.auth_data.user_key.as_ref().is_none() {
+        let mut proof_auth = ProofAuth {
+            acc_and_type_hash: acc_and_type_hash.clone(),
+            id_pub_key: id_pub_key_hex,
+            account_plain: None,
+        };
+        match auth.is_account_plain() {
+            true => proof_auth.account_plain = Some(account.account),
+            _ => (),
+        }
+        // get user key and user key signature
+        let user_key = auth.get_user_key();
+        let user_key_signature = auth.get_user_key_signature();
+        // when no user key field, return signature only
+        if user_key.is_none() {
             info(&format!(
                 "user key is None, return signature only: {:?}",
                 &signature_b
             ));
-            Ok(
-                ProofSigned::new(auth.to_proof_auth(id_pub_key_hex), &signature_b, None)
-                    .to_json_bytes(),
-            )
-        } else if auth.auth_data.user_key.as_ref().unwrap().eq("") {
+            return Ok(ProofSigned::new(proof_auth, &signature_b, None).to_json_bytes());
+        }
+        // when user key is empty string, generate new key
+        let user_key_str = user_key.unwrap();
+        if user_key_str.eq("") {
             info("user key is empty, generate key");
-            let user_key = sgx_utils::rand_bytes();
-
-            let user_key_sealed = sgx_utils::i_seal(&user_key, &get_config_seal_key())?;
-            let user_key_hex = encode_hex(&user_key);
-            let user_key_sealed_hex = encode_hex(&user_key_sealed);
-            let msg_to_sign = format!(
-                "{}:{}",
-                auth.account.acc_and_type_hash.as_ref().unwrap(),
-                &user_key_sealed_hex
+            let user_key_store =
+                gen_user_key_store(&acc_and_type_hash.clone(), &self.conf.signing_key)?;
+            return Ok(
+                ProofSigned::new(proof_auth, &signature_b, Some(user_key_store)).to_json_bytes(),
             );
-            let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
-            let user_key_signed_hex = encode_hex(&user_key_signed);
-            let user_key_store = UserKeyStore {
-                user_key_plain: user_key_hex,
-                user_key: Some(user_key_sealed_hex),
-                user_key_signature: Some(user_key_signed_hex),
-            };
-            Ok(ProofSigned::new(
-                auth.to_proof_auth(id_pub_key_hex),
-                &signature_b,
-                Some(user_key_store),
-            )
-            .to_json_bytes())
-        } else if auth.auth_data.user_key.as_ref().is_some()
-            && auth.auth_data.user_key_signature.as_ref().is_some()
-        {
-            let user_key_sealed_hex = auth.auth_data.user_key.as_ref().unwrap();
-            let user_key_signature = auth.auth_data.user_key_signature.as_ref().unwrap();
-            let msg_to_sign = format!(
-                "{}:{}",
-                auth.account.acc_and_type_hash.as_ref().unwrap(),
-                &user_key_sealed_hex
-            );
-            let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
-            let user_key_signed_hex = encode_hex(&user_key_signed);
-            if user_key_signed_hex.eq(user_key_signature) {
-                info("user key signature is valid");
-                let user_key_unsealed = sgx_utils::i_unseal(
-                    &decode_hex(&user_key_sealed_hex)?,
-                    &get_config_seal_key(),
-                )?;
-                let user_key_hex = encode_hex(&user_key_unsealed);
-                let user_key_store = UserKeyStore {
-                    user_key_plain: user_key_hex,
-                    user_key: None,
-                    user_key_signature: None,
-                };
-                Ok(ProofSigned::new(
-                    auth.to_proof_auth(id_pub_key_hex),
-                    &signature_b,
-                    Some(user_key_store),
-                )
-                .to_json_bytes())
-            } else {
-                Ok(
-                    ProofSigned::new(auth.to_proof_auth(id_pub_key_hex), &signature_b, None)
-                        .to_json_bytes(),
-                )
-            }
+        }
+        // when user key and user key signature is present, verify signature
+        if user_key_signature.is_none() {
+            error("user key signature is none");
+            return Err(GenericError::from("invalid request"));
+        }
+        let user_key_sig_str = user_key_signature.as_ref().unwrap();
+        let msg_to_sign = format!("{}:{}", acc_and_type_hash, &user_key_str);
+        let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
+        let user_key_signed_hex = encode_hex(&user_key_signed);
+        if user_key_signed_hex.eq(user_key_sig_str) {
+            let user_key_store = decrypt_key_store(&user_key_str)?;
+            Ok(ProofSigned::new(proof_auth, &signature_b, Some(user_key_store)).to_json_bytes())
         } else {
-            Err(GenericError::from("invalid request"))
+            Ok(ProofSigned::new(proof_auth, &signature_b, None).to_json_bytes())
         }
     }
+}
+
+impl SignerAgent for ProofSignerAgentV1 {
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
+        let account = auth.get_account();
+        if account.acc_hash.is_none() || account.acc_and_type_hash.is_none() {
+            error("account hash is none");
+            return Err(GenericError::from("invalid request"));
+        }
+        let acc_hash = account.acc_hash.unwrap();
+        let acc_and_type_hash = account.acc_and_type_hash.unwrap();
+        let request_id = match auth.get_request_id() {
+            Some(r) => r,
+            None => {
+                error("request id is none");
+                return Err(GenericError::from("invalid request"));
+            }
+        };
+        let mut proof_auth = ProofAuthV1 {
+            acc_and_type_hash: acc_and_type_hash.clone(),
+            request_id: request_id.clone(),
+            account_plain: None,
+        };
+        match auth.is_account_plain() {
+            true => proof_auth.account_plain = Some(account.account),
+            _ => (),
+        }
+        let signature_b = eth_sign_abi_v1(&acc_and_type_hash, &request_id, &self.conf.signing_key);
+        let user_key = auth.get_user_key();
+        let user_key_signature = auth.get_user_key_signature();
+        // when no user key field, return signature only
+        if user_key.is_none() {
+            info(&format!(
+                "user key is None, return signature only: {:?}",
+                &signature_b
+            ));
+            return Ok(ProofSignedV1::new(proof_auth, &signature_b, None).to_json_bytes());
+        }
+        // when user key is "", gen a new user key storeg
+        let user_key_str = user_key.unwrap();
+        if user_key_str.eq("") {
+            info("user key is empty, generate key");
+            let user_key_store = gen_user_key_store(&acc_and_type_hash, &self.conf.signing_key)?;
+            return Ok(
+                ProofSignedV1::new(proof_auth, &signature_b, Some(user_key_store)).to_json_bytes(),
+            );
+        }
+        // when user key and user key signature is present, verify signature
+        if user_key_signature.is_none() {
+            error("user key signature is none");
+            return Err(GenericError::from("invalid request"));
+        }
+        let user_key_sig_str = user_key_signature.unwrap();
+        let msg_to_sign = format!("{}:{}", acc_and_type_hash, &user_key_str);
+        let user_key_signed = eth_sign_str(&msg_to_sign, &self.conf.signing_key);
+        let user_key_signed_hex = encode_hex(&user_key_signed);
+        if user_key_signed_hex.eq(&user_key_sig_str) {
+            info("user key signature is valid");
+            let user_key_store = decrypt_key_store(&user_key_str)?;
+            Ok(ProofSignedV1::new(proof_auth, &signature_b, Some(user_key_store)).to_json_bytes())
+        } else {
+            Ok(ProofSignedV1::new(proof_auth, &signature_b, None).to_json_bytes())
+        }
+    }
+}
+
+fn gen_user_key_store(acc_hash: &str, signing_key: &str) -> GenericResult<UserKeyStore> {
+    let new_user_key = sgx_utils::rand_bytes();
+    let user_key_sealed = sgx_utils::i_seal(&new_user_key, &get_config_seal_key())?;
+    let user_key_hex = encode_hex(&new_user_key);
+    let user_key_sealed_hex = encode_hex(&user_key_sealed);
+    let msg_to_sign = format!("{}:{}", acc_hash, &user_key_sealed_hex);
+    let user_key_signed = eth_sign_str(&msg_to_sign, &signing_key);
+    let user_key_signed_hex = encode_hex(&user_key_signed);
+    Ok(UserKeyStore {
+        user_key_plain: user_key_hex,
+        user_key: Some(user_key_sealed_hex),
+        user_key_signature: Some(user_key_signed_hex),
+    })
+}
+
+fn decrypt_key_store(user_key_str: &str) -> GenericResult<UserKeyStore> {
+    info("user key signature is valid");
+    let user_key_unsealed =
+        sgx_utils::i_unseal(&decode_hex(&user_key_str)?, &get_config_seal_key())?;
+    let user_key_hex = encode_hex(&user_key_unsealed);
+    Ok(UserKeyStore {
+        user_key_plain: user_key_hex,
+        user_key: None,
+        user_key_signature: None,
+    })
 }
 
 fn derive_key(
@@ -350,9 +565,23 @@ struct BothSignature {
 impl ToJsonBytes for BothSignature {}
 
 impl SignerAgent for BothSignerAgent {
-    fn sign(&self, auth: &InnerAuth) -> GenericResult<Vec<u8>> {
-        let jwt = self.jwt.sign(&auth)?;
-        let proof = self.proof.sign(&auth)?;
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
+        let jwt = self.jwt.sign(auth)?;
+        let proof = self.proof.sign(auth)?;
+        let jwt_token = std::str::from_utf8(&jwt)?;
+        let proof_obj: ProofSigned = serde_json::from_slice(&proof)?;
+        Ok(BothSignature {
+            jwt: jwt_token.to_string(),
+            proof: proof_obj,
+        }
+        .to_json_bytes())
+    }
+}
+
+impl SignerAgent for BothSignerAgentV1 {
+    fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
+        let jwt = self.jwt.sign(auth)?;
+        let proof = self.proof.sign(auth)?;
         let jwt_token = std::str::from_utf8(&jwt)?;
         let proof_obj: ProofSigned = serde_json::from_slice(&proof)?;
         Ok(BothSignature {
@@ -384,6 +613,42 @@ fn eth_sign_abi(msg: &str, prv_k: &[u8]) -> Vec<u8> {
     sig_buffer.extend_from_slice(&sig.serialize());
     sig_buffer.push(last_byte);
     sig_buffer
+}
+
+fn eth_sign_abi_v1(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
+    let prv_k_b = decode_hex(prv_k).unwrap();
+    let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
+
+    info(&format!("sign raw parts: {} {}", account, request_id));
+    let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
+    // when request_id is hash encoded, decode; else hash it.
+    let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
+        Ok(r) => r,
+        Err(e) => {
+            error(&format!("request_id is not hash encoded: {}", e));
+            eth_hash(request_id.as_bytes())
+        }
+    };
+    let abi_encoded = abi_combine(&account_hash, &request_id_hash);
+    info(&format!("abi encode is {:?}", &abi_encoded));
+    let abi_hash = eth_hash(&abi_encoded);
+    info(&format!("abi hash is {:?}", &abi_hash));
+    let msg_to_sign = eth_message_b(&abi_hash);
+    info(&format!("msg to sign is {:?}", &msg_to_sign));
+    let message = libsecp256k1::Message::parse_slice(&msg_to_sign).unwrap();
+    let (sig, r_id) = libsecp256k1::sign(&message, &private_key);
+    let last_byte = r_id.serialize() + 27;
+    let mut sig_buffer: Vec<u8> = Vec::with_capacity(65);
+    sig_buffer.extend_from_slice(&sig.serialize());
+    sig_buffer.push(last_byte);
+    sig_buffer
+}
+
+fn abi_combine(account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
+    let mut abi_all = Vec::with_capacity(2 * 32);
+    abi_all.extend_from_slice(account_abi);
+    abi_all.extend_from_slice(request_id_abi);
+    abi_all
 }
 
 fn try_decode_hex(s: &str) -> GenericResult<[u8; 32]> {

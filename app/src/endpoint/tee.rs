@@ -14,6 +14,8 @@ pub trait TeeAuth {
     fn exchange_key(&self, exk_in: ExchangeKeyIn) -> Result<ExchangeKeyOut, Error>;
     fn send_otp(&self, otp_in: AuthIn) -> Result<(), Error>;
     fn auth_in_one(&self, auth_in: AuthIn) -> Result<AuthOut, Error>;
+    fn send_otp_v1(&self, otp_in: OtpIn) -> Result<(), Error>;
+    fn auth_in_one_v1(&self, otp_confirm_in: AuthInV1) -> Result<AuthOut, Error>;
 }
 
 #[derive(Debug)]
@@ -54,6 +56,29 @@ pub struct AuthIn<'a> {
 pub struct AuthOut {
     pub account: Account,
     pub cipher_sign: String,
+}
+
+/// Exchange Key Request includes a user public key for secure channel
+#[derive(Debug, Serialize)]
+pub struct OtpIn<'a> {
+    pub session_id: &'a str,
+    pub cipher_account: &'a str,
+    pub id_type: IdType,
+    pub client: &'a Client,
+}
+
+/// Exchange Key Request includes a user public key for secure channel
+#[derive(Debug, Serialize)]
+pub struct AuthInV1<'a> {
+    pub session_id: &'a str,
+    pub request_id: &'a str, // default None
+    pub cipher_code: &'a str,
+    pub client: &'a Client,
+    pub id_type: IdType, // when sms/email, compare code; when google, github, apple, call oauth
+    pub sign_mode: SignMode, // default Proof
+    pub account_plain: &'a Option<bool>,
+    pub user_key: &'a Option<String>,
+    pub user_key_signature: &'a Option<String>,
 }
 
 impl TeeAuth for TeeService {
@@ -141,6 +166,84 @@ impl TeeAuth for TeeService {
                 &mut sgx_result,
                 auth_in_b.as_ptr() as *const u8,
                 auth_in_b.len(),
+                MAX_LEN,
+                account_b.as_ptr() as *mut u8,
+                &mut account_b_size,
+                cipher_dauth.as_ptr() as *mut u8,
+                &mut cipher_dauth_size,
+                &mut error_code,
+            )
+        });
+        if error_code == 255 {
+            info!("confirm otp successfully");
+            let account_slice = &account_b[0..account_b_size];
+            let account = serde_json::from_slice(account_slice).unwrap();
+            let dauth_slice = &cipher_dauth[0..cipher_dauth_size];
+            return Ok(AuthOut {
+                account,
+                cipher_sign: hex::encode(dauth_slice),
+            });
+        }
+        match Error::from_int(error_code) {
+            Some(err) => Err(err),
+            None => {
+                error!("unknown error code {}", error_code);
+                Err(Error::new(ErrorKind::SgxError))
+            }
+        }
+    }
+
+    fn send_otp_v1(&self, otp_in: OtpIn) -> Result<(), Error> {
+        let in_b = serde_json::to_vec(&otp_in).map_err(|err| {
+            error!("auth_otp request to bytes failed, {}", err);
+            Error::new(ErrorKind::DataError)
+        })?;
+
+        let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+        let mut error_code = 255;
+        let result = self.pool.install(|| unsafe {
+            ecall::ec_send_otp_v1(
+                self.enclave.geteid(),
+                &mut sgx_result,
+                in_b.as_ptr() as *const u8,
+                in_b.len(),
+                &mut error_code,
+            )
+        });
+        if !sgx_success(result) || !sgx_success(sgx_result) {
+            error!("tee call failed.");
+            return Err(Error::new(ErrorKind::SgxError));
+        }
+        if error_code == 255 {
+            return Ok(());
+        }
+        match Error::from_int(error_code) {
+            Some(err) => Err(err),
+            None => {
+                error!("unknown error code {}", error_code);
+                Err(Error::new(ErrorKind::SgxError))
+            }
+        }
+    }
+
+    fn auth_in_one_v1(&self, otp_c_in: AuthInV1) -> Result<AuthOut, Error> {
+        let auth_req = serde_json::to_vec(&otp_c_in).map_err(|err| {
+            error!("encode client error, {}", err);
+            Error::new(ErrorKind::DataError)
+        })?;
+        const MAX_LEN: usize = 2048;
+        let mut account_b = [0_u8; MAX_LEN];
+        let mut account_b_size = 0;
+        let mut cipher_dauth = [0_u8; MAX_LEN];
+        let mut cipher_dauth_size = 0;
+        let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+        let mut error_code = 255;
+        let result = self.pool.install(|| unsafe {
+            ecall::ec_auth_in_one_v1(
+                self.enclave.geteid(),
+                &mut sgx_result,
+                auth_req.as_ptr() as *const u8,
+                auth_req.len(),
                 MAX_LEN,
                 account_b.as_ptr() as *mut u8,
                 &mut account_b_size,

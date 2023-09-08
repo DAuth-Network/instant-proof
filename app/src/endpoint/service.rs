@@ -43,7 +43,7 @@ pub struct SuccResp<Data: Serialize2> {
     data: Data,
 }
 
-fn fail_resp(err: derr::Error) -> HttpResponse {
+pub fn fail_resp(err: derr::Error) -> HttpResponse {
     HttpResponse::Ok().json(FailResp {
         status: Status::Fail,
         error_code: format!("{:?}", err.kind()),
@@ -51,14 +51,14 @@ fn fail_resp(err: derr::Error) -> HttpResponse {
     })
 }
 
-fn succ_resp() -> HttpResponse {
+pub fn succ_resp() -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
         status: Status::Success,
         data: "".to_string(),
     })
 }
 
-fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
+pub fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
         status: Status::Success,
         data: resp,
@@ -189,7 +189,7 @@ pub async fn auth_in_one(
     let auth_in = AuthIn {
         session_id: &req.session_id,
         cipher_data: &req.cipher_data,
-        client: &client
+        client: &client,
     };
     let auth_result = tee.auth_in_one(auth_in);
     if auth_result.is_err() {
@@ -232,7 +232,7 @@ pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     json_resp(JwksResp { keys: vec![jwk] })
 }
 
-fn get_client(
+pub fn get_client(
     clients: &Vec<Client>,
     client_id: &str,
     headers: &HeaderMap,
