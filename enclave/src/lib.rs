@@ -76,7 +76,9 @@ struct EnclaveConfig {
     pub jwt: signer::JwtSignerAgent,
     pub jwt_fb: signer::JwtFbSignerAgent,
     pub proof: signer::ProofSignerAgent,
+    pub proofv1: signer::ProofSignerAgentV1,
     pub both_signer: signer::BothSignerAgent,
+    pub both_signerv1: signer::BothSignerAgentV1,
     pub mail: otp::MailChannelClient,
     pub mail_api: otp::MailApiChannelClient,
     pub sms: otp::SmsChannelClient,
@@ -153,11 +155,22 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                     proof: signer::ProofSignerAgent {
                         conf: tee_conf.signer.proof.clone(),
                     },
+                    proofv1: signer::ProofSignerAgentV1 {
+                        conf: tee_conf.signer.proof.clone(),
+                    },
                     both_signer: signer::BothSignerAgent {
                         jwt: signer::JwtSignerAgent {
                             conf: tee_conf.signer.jwt.clone(),
                         },
                         proof: signer::ProofSignerAgent {
+                            conf: tee_conf.signer.proof.clone(),
+                        },
+                    },
+                    both_signerv1: signer::BothSignerAgentV1 {
+                        jwt: signer::JwtSignerAgent {
+                            conf: tee_conf.signer.jwt.clone(),
+                        },
+                        proof: signer::ProofSignerAgentV1 {
                             conf: tee_conf.signer.proof.clone(),
                         },
                     },

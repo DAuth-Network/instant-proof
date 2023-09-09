@@ -24,7 +24,10 @@ pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
         SignMode::Jwt => &conf.jwt,
         SignMode::JwtFb => &conf.jwt_fb,
         SignMode::Proof => &conf.proof,
-        _ => &conf.both_signer,
+        SignMode::Proofv1 => &conf.proofv1,
+        SignMode::Both => &conf.both_signer,
+        SignMode::Bothv1 => &conf.both_signerv1,
+        _ => &conf.proof,
     }
 }
 
