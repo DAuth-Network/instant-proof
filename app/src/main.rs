@@ -192,8 +192,8 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
 
     let subpath = conf.api.prefix;
-    let subpath_v1 = format!("{}/v1/", subpath);
-    let subpath_v2 = format!("{}/v2/", subpath);
+    let subpath_v1 = format!("{}/v1.1", subpath);
+    let subpath_v2 = format!("{}/v2", subpath);
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
         let app = App::new()
