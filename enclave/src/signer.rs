@@ -565,7 +565,14 @@ struct BothSignature {
     proof: ProofSigned,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct BothSignatureV1 {
+    jwt: String,
+    proof: ProofSignedV1,
+}
+
 impl ToJsonBytes for BothSignature {}
+impl ToJsonBytes for BothSignatureV1{}
 
 impl SignerAgent for BothSignerAgent {
     fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
@@ -586,8 +593,8 @@ impl SignerAgent for BothSignerAgentV1 {
         let jwt = self.jwt.sign(auth)?;
         let proof = self.proof.sign(auth)?;
         let jwt_token = std::str::from_utf8(&jwt)?;
-        let proof_obj: ProofSigned = serde_json::from_slice(&proof)?;
-        Ok(BothSignature {
+        let proof_obj: ProofSignedV1 = serde_json::from_slice(&proof)?;
+        Ok(BothSignatureV1 {
             jwt: jwt_token.to_string(),
             proof: proof_obj,
         }
