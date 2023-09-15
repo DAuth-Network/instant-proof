@@ -61,8 +61,8 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
     let mut tx = conn.start_transaction(TxOpts::default())?;
     tx.exec_drop(
         "insert into auth (
-            acc_hash, acc_and_type_hash, id_type, acc_auth_seq, audience, auth_datetime, auth_exp, request_id
-        ) values (?, ?, ?, ?, ?, ?, ?, ?)",
+            acc_hash, acc_and_type_hash, id_type, acc_auth_seq, audience, auth_datetime, auth_exp
+        ) values (?, ?, ?, ?, ?, ?, ?)",
         (
             hist.acc_hash,
             hist.acc_and_type_hash,
@@ -71,7 +71,6 @@ pub fn insert_auth(pool: &Pool, hist: Auth) -> GenericResult<()> {
             hist.audience,
             hist.auth_datetime,
             hist.auth_exp,
-            hist.request_id,
         ),
     )?;
     tx.commit()?;

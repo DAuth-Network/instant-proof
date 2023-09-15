@@ -37,8 +37,10 @@ pub struct Client {
 pub enum SignMode {
     Jwt,
     Proof,
+    Proofv1,
     JwtFb,
     Both,
+    Bothv1,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -120,6 +122,31 @@ impl InnerAccount {
 pub struct AuthService {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthIn {
+    pub session_id: String,
+    pub cipher_data: String,
+    pub client: Client,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OtpData {
+    pub account: String,
+    pub id_type: IdType,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AuthData {
+    pub code: String,
+    pub id_type: IdType, // default None, when None, compare with otp otherwise, call oauth
+    pub id_key_salt: Option<i32>, // default Proof
+    pub sign_msg: Option<String>, // default Proof
+    pub sign_mode: SignMode, // default Proof
+    pub account_plain: Option<bool>,
+    pub user_key: Option<String>,
+    pub user_key_signature: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OtpIn {
     pub session_id: String,
     pub cipher_account: String,
@@ -128,7 +155,7 @@ pub struct OtpIn {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AuthIn {
+pub struct AuthInV1 {
     pub session_id: String,
     pub request_id: String, // default None
     pub cipher_code: String,

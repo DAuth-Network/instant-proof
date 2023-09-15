@@ -43,7 +43,7 @@ pub struct SuccResp<Data: Serialize2> {
     data: Data,
 }
 
-fn fail_resp(err: derr::Error) -> HttpResponse {
+pub fn fail_resp(err: derr::Error) -> HttpResponse {
     HttpResponse::Ok().json(FailResp {
         status: Status::Fail,
         error_code: format!("{:?}", err.kind()),
@@ -51,14 +51,14 @@ fn fail_resp(err: derr::Error) -> HttpResponse {
     })
 }
 
-fn succ_resp() -> HttpResponse {
+pub fn succ_resp() -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
         status: Status::Success,
         data: "".to_string(),
     })
 }
 
-fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
+pub fn json_resp<S: Serialize2>(resp: S) -> HttpResponse {
     HttpResponse::Ok().json(SuccResp {
         status: Status::Success,
         data: resp,
@@ -127,18 +127,16 @@ pub async fn exchange_key(
 }
 
 #[derive(Deserialize)]
-pub struct AuthOtpReq {
+pub struct AuthReq {
     client_id: String,
     session_id: String,
-    cipher_account: String,
-    id_type: IdType,
-    request_id: Option<String>,
+    cipher_data: String,
 }
 
 // with BaseResp
 #[post("/send_otp")]
 pub async fn send_otp(
-    req: web::Json<AuthOtpReq>,
+    req: web::Json<AuthReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -156,10 +154,9 @@ pub async fn send_otp(
     }
     let client = client_o.unwrap();
     let tee = &endex.tee;
-    let auth_otp_in = OtpIn {
+    let auth_otp_in = AuthIn {
         session_id: &req.session_id,
-        cipher_account: &req.cipher_account,
-        id_type: req.id_type,
+        cipher_data: &req.cipher_data,
         client: &client,
     };
     match tee.send_otp(auth_otp_in) {
@@ -168,22 +165,9 @@ pub async fn send_otp(
     }
 }
 
-#[derive(Deserialize)]
-pub struct AuthInOneReq {
-    client_id: String,
-    session_id: String,
-    cipher_code: String,
-    id_type: IdType,
-    request_id: Option<String>,
-    sign_mode: Option<SignMode>, // default proof, or JWT
-    account_plain: Option<bool>,
-    user_key: Option<String>,
-    user_key_signature: Option<String>,
-}
-
 #[post("/auth_in_one")]
 pub async fn auth_in_one(
-    req: web::Json<AuthInOneReq>,
+    req: web::Json<AuthReq>,
     http_req: HttpRequest,
     endex: web::Data<AppState>,
 ) -> HttpResponse {
@@ -202,30 +186,10 @@ pub async fn auth_in_one(
     }
     let client = client_o.unwrap();
     let tee = &endex.tee;
-    let request_id = match &req.request_id {
-        Some(r) => {
-            if r.starts_with("0x") {
-                r[2..].to_string()
-            } else {
-                r.to_string()
-            }
-        }
-        None => "None".to_string(),
-    };
-    let sign_mode = match &req.sign_mode {
-        Some(r) => r.to_owned(),
-        None => SignMode::Proof,
-    };
     let auth_in = AuthIn {
         session_id: &req.session_id,
-        cipher_code: &req.cipher_code,
-        request_id: &request_id,
+        cipher_data: &req.cipher_data,
         client: &client,
-        id_type: req.id_type,
-        sign_mode,
-        account_plain: &req.account_plain,
-        user_key: &req.user_key,
-        user_key_signature: &req.user_key_signature,
     };
     let auth_result = tee.auth_in_one(auth_in);
     if auth_result.is_err() {
@@ -238,7 +202,7 @@ pub async fn auth_in_one(
         error!("insert account error {}", insert_r.err().unwrap());
         return fail_resp(derr::Error::new(derr::ErrorKind::DbError));
     }
-    let auth = Auth::new(&account, &client.client_name, &request_id);
+    let auth = Auth::new(&account, &client.client_name);
     let insert_auth_r = insert_auth(&endex.db_pool, auth);
     if insert_auth_r.is_err() {
         error!("insert auth error {}", insert_auth_r.err().unwrap());
@@ -268,7 +232,7 @@ pub async fn jwks(endex: web::Data<AppState>) -> impl Responder {
     json_resp(JwksResp { keys: vec![jwk] })
 }
 
-fn get_client(
+pub fn get_client(
     clients: &Vec<Client>,
     client_id: &str,
     headers: &HeaderMap,

@@ -40,6 +40,27 @@ extern "C" {
         error_code: *mut u8,
     ) -> sgx_status_t;
 
+    pub fn ec_send_otp_v1(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        otp_req: *const u8,
+        otp_req_size: usize,
+        error_code: *mut u8,
+    ) -> sgx_status_t;
+
+    pub fn ec_auth_in_one_v1(
+        eid: sgx_enclave_id_t,
+        retval: *mut sgx_status_t,
+        auth_req: *const u8,
+        auth_req_size: usize,
+        max_len: usize,
+        account_b: *mut u8,
+        account_b_size: *mut usize,
+        cipher_dauth: *mut u8,
+        cipher_dauth_size: *mut usize,
+        error_code: *mut u8,
+    ) -> sgx_status_t;
+
     pub fn ec_test(eid: sgx_enclave_id_t, retval: *mut sgx_status_t) -> sgx_status_t;
 
 }

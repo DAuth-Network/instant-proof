@@ -13,10 +13,12 @@ extern crate tiny_keccak;
 #[macro_use]
 extern crate sgx_tstd as std;
 extern crate base64;
+extern crate bip32;
 extern crate http_req;
 extern crate serde;
 extern crate serde_json;
 extern crate sgx_rand;
+
 #[macro_use]
 extern crate serde_cbor;
 #[cfg(target_env = "sgx")]
@@ -36,8 +38,10 @@ use std::string::{String, ToString};
 use std::sync::{Once, SgxMutex};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
+use bip32::{Prefix, XPrv};
 use std::ptr;
 use std::str;
+
 pub mod auth;
 pub mod config;
 pub mod err;
@@ -72,7 +76,9 @@ struct EnclaveConfig {
     pub jwt: signer::JwtSignerAgent,
     pub jwt_fb: signer::JwtFbSignerAgent,
     pub proof: signer::ProofSignerAgent,
+    pub proofv1: signer::ProofSignerAgentV1,
     pub both_signer: signer::BothSignerAgent,
+    pub both_signerv1: signer::BothSignerAgentV1,
     pub mail: otp::MailChannelClient,
     pub mail_api: otp::MailApiChannelClient,
     pub sms: otp::SmsChannelClient,
@@ -149,11 +155,22 @@ fn config(tee_config: Option<TeeConfig>) -> &'static ConfigReader {
                     proof: signer::ProofSignerAgent {
                         conf: tee_conf.signer.proof.clone(),
                     },
+                    proofv1: signer::ProofSignerAgentV1 {
+                        conf: tee_conf.signer.proof.clone(),
+                    },
                     both_signer: signer::BothSignerAgent {
                         jwt: signer::JwtSignerAgent {
                             conf: tee_conf.signer.jwt.clone(),
                         },
                         proof: signer::ProofSignerAgent {
+                            conf: tee_conf.signer.proof.clone(),
+                        },
+                    },
+                    both_signerv1: signer::BothSignerAgentV1 {
+                        jwt: signer::JwtSignerAgent {
+                            conf: tee_conf.signer.jwt.clone(),
+                        },
+                        proof: signer::ProofSignerAgentV1 {
                             conf: tee_conf.signer.proof.clone(),
                         },
                     },
@@ -225,7 +242,7 @@ pub extern "C" fn ec_send_otp(
 ) -> sgx_status_t {
     info("sgx send otp");
     let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
-    let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
+    let req: AuthIn = serde_json::from_slice(req_slice).unwrap();
     let result = config(None).inner.dauth.send_otp(&req);
     if result.is_err() {
         unsafe {
@@ -239,7 +256,29 @@ pub extern "C" fn ec_send_otp(
     sgx_status_t::SGX_SUCCESS
 }
 
-fn decrypt_text_to_text(cipher_text: &str, session: &Session) -> Result<String, Error> {
+#[no_mangle]
+pub extern "C" fn ec_send_otp_v1(
+    otp_req: *const u8,
+    otp_req_size: usize,
+    error_code: &mut u8,
+) -> sgx_status_t {
+    info("sgx send otp");
+    let req_slice = unsafe { slice::from_raw_parts(otp_req, otp_req_size as usize) };
+    let req: OtpIn = serde_json::from_slice(req_slice).unwrap();
+    let result = config(None).inner.dauth.send_otp_v1(&req);
+    if result.is_err() {
+        unsafe {
+            *error_code = result.err().unwrap().to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    unsafe {
+        *error_code = 255;
+    }
+    sgx_status_t::SGX_SUCCESS
+}
+
+fn decrypt_text(cipher_text: &str, session: &Session) -> Result<String, Error> {
     let cipher_text_b_r = decode_hex(cipher_text);
     if cipher_text_b_r.is_err() {
         error("decode account failed");
@@ -324,6 +363,62 @@ pub extern "C" fn ec_auth_in_one(
     sgx_status_t::SGX_SUCCESS
 }
 
+#[no_mangle]
+pub extern "C" fn ec_auth_in_one_v1(
+    auth_req: *const u8,
+    auth_req_size: usize,
+    max_len: u32,
+    account_o: *mut u8,
+    account_o_size: *mut u32,
+    cipher_dauth_o: *mut u8,
+    cipher_dauth_o_size: *mut u32,
+    error_code: &mut u8,
+) -> sgx_status_t {
+    // get request
+    let req_slice = unsafe { slice::from_raw_parts(auth_req, auth_req_size) };
+    let req: AuthInV1 = match serde_json::from_slice(req_slice) {
+        Ok(v) => v,
+        Err(e) => {
+            error("invalid auth_in req bytes");
+            unsafe {
+                *error_code = Error::new(ErrorKind::DataError).to_int();
+            }
+            return sgx_status_t::SGX_SUCCESS;
+        }
+    };
+    let result = config(None).inner.dauth.auth_in_one_v1(&req);
+    if result.is_err() {
+        unsafe {
+            *error_code = result.err().unwrap().to_int();
+        }
+        return sgx_status_t::SGX_SUCCESS;
+    }
+    let (account, cipher_dauth_b) = result.unwrap();
+    let account_b = account.to_json_bytes();
+    if account_b.len() > max_len as usize {
+        error("account too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    if cipher_dauth_b.len() > max_len as usize {
+        error("auth too long");
+        return sgx_status_t::SGX_ERROR_INVALID_ATTRIBUTE;
+    }
+    unsafe {
+        ptr::copy_nonoverlapping(account_b.as_ptr(), account_o, account_b.len());
+        *account_o_size = account_b.len().try_into().unwrap();
+        ptr::copy_nonoverlapping(
+            cipher_dauth_b.as_ptr(),
+            cipher_dauth_o,
+            cipher_dauth_b.len(),
+        );
+        *cipher_dauth_o_size = cipher_dauth_b.len().try_into().unwrap();
+    }
+    unsafe {
+        *error_code = 255;
+    }
+    sgx_status_t::SGX_SUCCESS
+}
+
 fn get_config_seal_key() -> String {
     let conf = &config(None).inner;
     conf.config.seal_key.clone()
@@ -367,6 +462,13 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 //Testing functions
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
+    println!("running ec_test");
+    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap();
+    //let dk1 = derive_xprv(&s, "m/0/2147483647'/1/2147483646'");
+    //let dk2 = derive_xprv(&s, "m/0/eee'/1/bbb123'");
+    //println!("dk1 {:?}", &*dk1.to_string(Prefix::XPRV));
+    //print!("dk2 {}", &*dk2.to_string(Prefix::XPRV));
+
     sgx_status_t::SGX_SUCCESS
 }
 

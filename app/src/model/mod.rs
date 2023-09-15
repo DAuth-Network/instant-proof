@@ -68,11 +68,11 @@ pub struct Auth {
     pub auth_datetime: PrimitiveDateTime,
     pub auth_exp: u64,
     pub audience: String,
-    pub request_id: String,
+    pub request_id: Option<String>,
 }
 
 impl Auth {
-    pub fn new(account: &Account, audience: &str, request_id: &str) -> Self {
+    pub fn new(account: &Account, audience: &str) -> Self {
         Self {
             acc_hash: account.acc_hash.clone(),
             acc_and_type_hash: account.acc_and_type_hash.clone(),
@@ -81,7 +81,19 @@ impl Auth {
             auth_datetime: utils::now_datetime().unwrap(),
             auth_exp: 0,
             audience: audience.to_string(),
-            request_id: request_id.to_string(),
+            request_id: None,
+        }
+    }
+    pub fn new_v1(account: &Account, audience: &str, request_id: &str) -> Self {
+        Self {
+            acc_hash: account.acc_hash.clone(),
+            acc_and_type_hash: account.acc_and_type_hash.clone(),
+            id_type: account.id_type,
+            auth_id: 0,
+            auth_datetime: utils::now_datetime().unwrap(),
+            auth_exp: 0,
+            audience: audience.to_string(),
+            request_id: Some(request_id.to_string()),
         }
     }
 }

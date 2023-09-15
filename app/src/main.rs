@@ -28,7 +28,8 @@ mod ocall;
 mod persistence;
 
 use config_file::{Config, File};
-use endpoint::service::*;
+use endpoint::service;
+use endpoint::service_v1;
 use endpoint::tee::*;
 use ocall::*;
 use persistence::dclient::*;
@@ -172,7 +173,7 @@ async fn main() -> std::io::Result<()> {
     let client_db = init_db_pool(&conf.db.client);
     let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
     let jwt_pub_key = parse_pem(&env::var("PROOF_PUB_KEY").unwrap());
-    let edata: web::Data<AppState> = web::Data::new(AppState {
+    let edata: web::Data<service::AppState> = web::Data::new(service::AppState {
         tee: TeeService::new(enclave, pool),
         jwt_pub_key,
         db_pool: init_db_pool(&conf.db.auth),
@@ -191,6 +192,8 @@ async fn main() -> std::io::Result<()> {
         .unwrap();
 
     let subpath = conf.api.prefix;
+    let subpath_v1 = format!("{}/v1.1", subpath);
+    let subpath_v2 = format!("{}/v2", subpath);
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
         let app = App::new()
@@ -199,12 +202,20 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .app_data(web::Data::clone(&edata))
             .service(
-                web::scope(&subpath)
-                    .service(exchange_key)
-                    .service(send_otp)
-                    .service(auth_in_one)
-                    .service(jwks)
-                    .service(health),
+                web::scope(&subpath_v1)
+                    .service(service::exchange_key)
+                    .service(service_v1::send_otp)
+                    .service(service_v1::auth_in_one)
+                    .service(service::jwks)
+                    .service(service::health),
+            )
+            .service(
+                web::scope(&subpath_v2)
+                    .service(service::exchange_key)
+                    .service(service::send_otp)
+                    .service(service::auth_in_one)
+                    .service(service::jwks)
+                    .service(service::health),
             );
         // load index.html for testing only when env is dev
         match conf.api.env {

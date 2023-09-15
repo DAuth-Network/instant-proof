@@ -29,6 +29,7 @@ tiny-keccak = { version = "2.0.2", features = ["keccak"] }
 libsecp256k1 = { git = "https://github.com/DAuth-Network/libsecp256k1", default-features = false,features = ["hmac", "static-context"]}
 jsonwebtoken = { git = "https://github.com/mesalock-linux/jsonwebtoken-sgx" }
 base64 = { git = "https://github.com/mesalock-linux/rust-base64-sgx" }
+bip32 = { version = "*", default-features = false, features=["secp256k1", "alloc"] }
 
 [patch.'https://github.com/apache/teaclave-sgx-sdk.git']
 sgx_alloc = { path = "../../../sgx_alloc" }
