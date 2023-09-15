@@ -572,7 +572,7 @@ struct BothSignatureV1 {
 }
 
 impl ToJsonBytes for BothSignature {}
-impl ToJsonBytes for BothSignatureV1{}
+impl ToJsonBytes for BothSignatureV1 {}
 
 impl SignerAgent for BothSignerAgent {
     fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
@@ -635,7 +635,7 @@ fn eth_sign_abi_v1(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
     let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
         Ok(r) => r,
         Err(e) => {
-            error(&format!("request_id is not hash encoded: {}", e));
+            info(&format!("request_id is not hash encoded: {}", e));
             eth_hash(request_id.as_bytes())
         }
     };
