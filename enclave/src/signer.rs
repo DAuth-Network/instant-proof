@@ -610,7 +610,7 @@ fn eth_sign_abi(msg: &str, prv_k: &[u8]) -> Vec<u8> {
     let msg_hash: [u8; 32] = match try_decode_hex(msg) {
         Ok(r) => r,
         Err(e) => {
-            error(&format!("sign_msg is not hash encoded: {}", e));
+            info(&format!("sign_msg is not hash encoded: {}", e));
             eth_hash(msg.as_bytes())
         }
     };
