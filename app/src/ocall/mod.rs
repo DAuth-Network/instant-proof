@@ -13,7 +13,8 @@ pub extern "C" fn oc_log(level: i32, msg: *const u8, msg_len: i32) {
     match level {
         0 => debug!("enclave: {}", msg),
         1 => info!("enclave: {}", msg),
-        2 => error!("enclave: {}", msg),
+        2 => warn!("enclave: {}", msg),
+        3 => error!("enclave: {}", msg),
         _ => info!("enclave: {}", msg),
     }
 }

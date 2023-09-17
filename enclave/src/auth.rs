@@ -123,7 +123,7 @@ impl Auth for AuthService {
                     Some(r) => match r.oauth(&auth_data.code, &req.client.client_redirect_url) {
                         Ok(n) => Ok(n),
                         Err(e) => {
-                            error(&format!("oauth failed {:?}", e));
+                            warn(&format!("oauth failed {:?}", e));
                             Err(Error::new(ErrorKind::OAuthCodeError))
                         }
                     },
@@ -134,7 +134,7 @@ impl Auth for AuthService {
         let mut account = match result {
             Ok(r) => r,
             Err(e) => {
-                error(&format!("auth failed {:?}", e));
+                warn(&format!("auth failed {:?}", e));
                 return Err(e);
             }
         };

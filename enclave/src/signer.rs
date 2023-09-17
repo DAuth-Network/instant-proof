@@ -381,6 +381,8 @@ impl SignerAgent for ProofSignerAgent {
             derive_key(&self.conf.signing_key, &acc_hash, id_key_salt.clone())?;
         let id_pub_key_hex = encode_hex(&id_pub_key);
         let signature_b = eth_sign_abi(&sign_msg, &id_priv_key);
+        let id_priv_key_hex = encode_hex(&id_priv_key);
+        info(&format!("derive priv key {}", &id_priv_key_hex));
         let mut proof_auth = ProofAuth {
             acc_and_type_hash: acc_and_type_hash.clone(),
             id_pub_key: id_pub_key_hex,
