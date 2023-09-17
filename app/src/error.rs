@@ -50,7 +50,7 @@ impl ErrorKind {
             6 => Some(ErrorKind::DataError),
             7 => Some(ErrorKind::SgxError),
             8 => Some(ErrorKind::DbError),
-            9 => Some(ErrorKind::OtpCodeError)
+            9 => Some(ErrorKind::OtpCodeError),
             _ => None,
         }
     }
