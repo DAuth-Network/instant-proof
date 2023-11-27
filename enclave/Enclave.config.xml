@@ -6,7 +6,7 @@
     <StackMaxSize>0x2000000</StackMaxSize> 0.03G
     <HeapMaxSize>0x80000000</HeapMaxSize> 2G
   -->
-  <StackMaxSize>0x400000-</StackMaxSize>
+  <StackMaxSize>0x400000</StackMaxSize>
   <HeapMaxSize>0x4000000</HeapMaxSize>
   <TCSNum>14</TCSNum>
   <TCSPolicy>0</TCSPolicy>
