@@ -328,7 +328,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     );
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
-        &"http://github.com:443/login/oauth/access_token".to_string(),
+        &"https://github.com:443/login/oauth/access_token".to_string(),
         Method::POST,
         Some(to_string(&token_req).unwrap()),
         token_headers,
@@ -343,7 +343,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     let token = v["access_token"].clone().to_string();
     let account_headers = HashMap::from([("Authorization", token.as_str())]);
     let account_resp = http_req(
-        "http://api.github.com:443/user",
+        "https://api.github.com:443/user",
         Method::GET,
         None,
         account_headers,
