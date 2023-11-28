@@ -321,16 +321,23 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
     Ok(InnerAccount::build(twitter_id.to_string(), IdType::Twitter))
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+struct GithubOAuthReq {
+    client_id: String,
+    client_secret: String,
+    code: String
+}
+
 fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
-    let token_req = format!(
-        "client_id={}&client_secret={}&code={}",
-        conf.client_id, conf.client_secret, code
-    );
-    info(&token_req);
-    let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
+    let github_oauth_req = GithubOAuthReq {
+        client_id: conf.client_id.to_string(),
+        client_secret: conf.client_secret.to_string(),
+        code: code.to_string()
+    };
+    let token_headers = HashMap::from([("Content-Type", "application/json")]);
     let token_resp = http_req(
         &"https://github.com:443/login/oauth/access_token".to_string(),
-        Method::GET,
+        Method::POST,
         Some(to_string(&token_req).unwrap()),
         token_headers,
     );
