@@ -355,7 +355,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
         "https://api.github.com:443/user",
         Method::POST,
         None,
-        account_headers,
+        &account_headers,
     );
     if account_resp.is_err() {
         return Err(GenericError::from("github profile failed"));
