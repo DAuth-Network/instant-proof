@@ -326,6 +326,7 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
         "client_id={}&client_secret={}&code={}",
         conf.client_id, conf.client_secret, code
     );
+    info(&token_req);
     let token_headers = HashMap::from([("Content-Type", "application/x-www-form-urlencoded")]);
     let token_resp = http_req(
         &"https://github.com:443/login/oauth/access_token".to_string(),
