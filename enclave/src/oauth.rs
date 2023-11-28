@@ -349,10 +349,11 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
         return Err(GenericError::from("github oauth failed"));
     }
     let token = v["access_token"].clone().to_string();
-    let account_headers = HashMap::from([("Authorization", token.as_str()), ("User-Agent", "Openid3Auth")]);
+    let bear_token = format!("token {}", &token);
+    let account_headers = HashMap::from([("Authorization", bear_token), ("User-Agent", "Openid3Auth")]);
     let account_resp = http_req(
         "https://api.github.com:443/user",
-        Method::GET,
+        Method::POST,
         None,
         account_headers,
     );
