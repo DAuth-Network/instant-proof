@@ -116,7 +116,7 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
         return Err(GenericError::from("google oauth failed"));
     }
     Ok(InnerAccount::build(
-        v2["email"].clone().to_string(),
+        v2["email"].as_str().unwrap().to_string(),
         IdType::Google,
     ))
 }
@@ -325,16 +325,19 @@ fn twitter_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericRes
 struct GithubOAuthReq {
     client_id: String,
     client_secret: String,
-    code: String
+    code: String,
 }
 
 fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResult<InnerAccount> {
     let github_oauth_req = GithubOAuthReq {
         client_id: conf.client_id.to_string(),
         client_secret: conf.client_secret.to_string(),
-        code: code.to_string()
+        code: code.to_string(),
     };
-    let token_headers = HashMap::from([("Content-Type", "application/json"), ("User-Agent", "Openid3Auth")]);
+    let token_headers = HashMap::from([
+        ("Content-Type", "application/json"),
+        ("User-Agent", "Openid3Auth"),
+    ]);
     let token_resp = http_req(
         &"https://github.com:443/login/oauth/access_token".to_string(),
         Method::POST,
@@ -351,7 +354,10 @@ fn github_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
     let token = v["access_token"].as_str().unwrap();
     let bear_token = format!("token {}", &token);
     info(&bear_token);
-    let account_headers = HashMap::from([("Authorization", bear_token.as_str()), ("User-Agent", "Openid3Auth")]);
+    let account_headers = HashMap::from([
+        ("Authorization", bear_token.as_str()),
+        ("User-Agent", "Openid3Auth"),
+    ]);
     let account_resp = http_req(
         "https://api.github.com:443/user",
         Method::GET,
