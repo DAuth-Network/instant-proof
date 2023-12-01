@@ -112,11 +112,11 @@ fn google_oauth(conf: &OAuthConf, code: &str, redirect_url: &str) -> GenericResu
         user_headers,
     );
     let v2: Value = serde_json::from_str(&account_resp?)?;
-    if v2["email"].is_null() {
+    if v2["sub"].is_null() {
         return Err(GenericError::from("google oauth failed"));
     }
     Ok(InnerAccount::build(
-        v2["email"].as_str().unwrap().to_string(),
+        v2["sub"].as_str().unwrap().to_string(),
         IdType::Google,
     ))
 }

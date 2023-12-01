@@ -609,7 +609,7 @@ fn eth_sign_abi(msg: &str, prv_k: &[u8]) -> Vec<u8> {
 
     info(&format!("sign msg: {}", msg));
     // when msg is hash encoded, decode; else hash it.
-    let msg_hash: [u8; 32] = match try_decode_hex(msg) {
+    let msg_hash: [u8; 32] = match try_decode_hex32(msg) {
         Ok(r) => r,
         Err(e) => {
             info(&format!("sign_msg is not hash encoded: {}", e));
@@ -632,13 +632,13 @@ fn eth_sign_abi_v1(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
     let private_key = libsecp256k1::SecretKey::parse_slice(&prv_k_b).unwrap();
 
     info(&format!("sign raw parts: {} {}", account, request_id));
-    let account_hash: [u8; 32] = decode_hex(account).unwrap().try_into().unwrap();
+    let account_hash: [u8; 64] = decode_hex(account).unwrap().try_into().unwrap();
     // when request_id is hash encoded, decode; else hash it.
-    let request_id_hash: [u8; 32] = match try_decode_hex(request_id) {
+    let request_id_hash: Vec<u8> = match try_decode_hex(request_id) {
         Ok(r) => r,
         Err(e) => {
             info(&format!("request_id is not hash encoded: {}", e));
-            eth_hash(request_id.as_bytes())
+            eth_hash(request_id.as_bytes()).to_vec()
         }
     };
     let abi_encoded = abi_combine(&account_hash, &request_id_hash);
@@ -656,14 +656,23 @@ fn eth_sign_abi_v1(account: &str, request_id: &str, prv_k: &str) -> Vec<u8> {
     sig_buffer
 }
 
-fn abi_combine(account_abi: &[u8; 32], request_id_abi: &[u8; 32]) -> Vec<u8> {
-    let mut abi_all = Vec::with_capacity(2 * 32);
+fn abi_combine(account_abi: &[u8; 64], request_id_abi: &[u8]) -> Vec<u8> {
+    let mut abi_all = Vec::new();
     abi_all.extend_from_slice(account_abi);
     abi_all.extend_from_slice(request_id_abi);
     abi_all
 }
 
-fn try_decode_hex(s: &str) -> GenericResult<[u8; 32]> {
+fn try_decode_hex(s: &str) -> GenericResult<Vec<u8>> {
+    let decode_r = decode_hex(s)?;
+    if decode_r.len() == 32 || decode_r.len() == 20 {
+        Ok(decode_r)
+    } else {
+        Err(GenericError::from("not a 32 bytes or 20 bytes"))
+    }
+}
+
+fn try_decode_hex32(s: &str) -> GenericResult<[u8; 32]> {
     let decode_r = decode_hex(s)?;
     match decode_r.try_into() {
         Ok(r) => Ok(r),

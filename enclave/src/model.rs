@@ -112,9 +112,12 @@ impl InnerAccount {
         self.acc_seal = Some(encode_hex(&sealed));
         let raw_hashed = signer::eth_hash(self.account.as_bytes());
         self.acc_hash = Some(encode_hex(&raw_hashed));
-        let raw_hashed2 =
-            signer::eth_hash(format!("{}:{}", self.id_type.to_string(), self.account).as_bytes());
-        self.acc_and_type_hash = Some(encode_hex(&raw_hashed2));
+        let id_type = self.id_type.to_string();
+        let type_hash = signer::eth_hash(id_type.as_bytes());
+        let mut result: [u8; 64] = [0; 64];
+        result[..32].copy_from_slice(&type_hash);
+        result[32..].copy_from_slice(&raw_hashed);
+        self.acc_and_type_hash = Some(encode_hex(&result));
         Ok(())
     }
 }
