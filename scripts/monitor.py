@@ -5,7 +5,9 @@ import toml
 import pathlib
 import datetime
 import socket
-
+import sendgrid
+import os
+from sendgrid.helpers.mail import *
 
 def send_alert(cfg, errors):
     server = SMTP_SSL(cfg['otp']['email']['server'], 465)
@@ -22,6 +24,18 @@ def send_alert(cfg, errors):
     )
     server.quit()
 
+def send_alert_new_api(cfg, errors):
+    api_key = cfg['otp']['email_api']['password'].split(' ')[1]
+    sg = sendgrid.SendGridAPIClient(api_key=api_key)
+    from_email = Email(cfg['otp']['email_api']['sender'])
+    to_email = To(cfg['alerts']['mail'])
+    subject = "Dauth api alerts"
+    content = Content("text/plain", ".".join(errors))
+    mail = Mail(from_email, to_email, subject, content)
+    response = sg.client.mail.send.post(request_body=mail.get())
+    print(response.status_code)
+    print(response.body)
+    print(response.headers)
 
 def format_msg(from_acc, to_accs, errs):
     return (
@@ -96,7 +110,7 @@ def monitor_status(conf):
     err3 = monitor_app_port(conf['api'])
     errs = err1 + err3
     if errs:
-        send_alert(conf, errs)
+        send_alert_new_api(conf, errs)
 
 
 def load_cfg(cfg_file):
