@@ -8,6 +8,7 @@ pub struct Account {
     pub acc_hash: String,
     pub acc_and_type_hash: String,
     pub acc_seal: String,
+    pub email_seal: String,
     pub id_type: IdType,
 }
 

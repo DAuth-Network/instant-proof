@@ -68,7 +68,8 @@ impl Auth for AuthService {
         }
         // update session
         session.code = otp;
-        let inner_account = InnerAccount::build(otp_data.account, otp_data.id_type);
+        let inner_account =
+            InnerAccount::build(otp_data.account.clone(), otp_data.id_type, otp_data.account);
         session.data = inner_account;
         update_session(&req.session_id, &session);
         Ok(())
@@ -209,7 +210,7 @@ impl Auth for AuthService {
         }
         // update session
         session.code = otp;
-        let inner_account = InnerAccount::build(account, req.id_type);
+        let inner_account = InnerAccount::build(account.clone(), req.id_type, account);
         session.data = inner_account;
         update_session(&req.session_id, &session);
         Ok(())

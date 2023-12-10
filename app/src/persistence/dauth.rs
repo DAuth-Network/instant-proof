@@ -17,13 +17,14 @@ pub fn insert_account(pool: &Pool, account: &Account) -> GenericResult<()> {
     let mut conn = pool.get_conn()?;
     let mut tx = conn.start_transaction(TxOpts::default())?;
     let stmt =
-        "insert into account(acc_hash, acc_and_type_hash, acc_seal, id_type) values (?,?,?,?)";
+        "insert into account(acc_hash, acc_and_type_hash, acc_seal, email_seal, id_type) values (?,?,?,?,?)";
     tx.exec_drop(
         stmt,
         (
             &account.acc_hash,
             &account.acc_and_type_hash,
             &account.acc_seal,
+            &account.email_seal,
             &account.id_type.to_string(),
         ),
     )?;
@@ -35,7 +36,7 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
     let mut result: Vec<Account> = Vec::new();
     let mut conn = pool.get_conn()?;
     let stmt = format!(
-        "select acc_hash, acc_and_type_hash, acc_seal, id_type from account where acc_hash='{}' and id_type='{}'",
+        "select acc_hash, acc_and_type_hash, acc_seal, email_seal, id_type from account where acc_hash='{}' and id_type='{}'",
         account.acc_hash,
         account.id_type.to_string()
     );
@@ -45,12 +46,14 @@ pub fn query_account(pool: &Pool, account: &Account) -> GenericResult<Vec<Accoun
             std::string::String,
             std::string::String,
             std::string::String,
+            std::string::String,
         ) = from_row(row.unwrap());
         result.push(Account {
             acc_hash: r.0,
             acc_and_type_hash: r.1,
             acc_seal: r.2,
-            id_type: IdType::from_str(&r.3).unwrap(),
+            email_seal: r.3,
+            id_type: IdType::from_str(&r.4).unwrap(),
         });
     });
     Ok(result)

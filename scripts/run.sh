@@ -5,8 +5,12 @@ pid_file="./$process_name.pid"
 
 start() {
     echo "Starting $process_name..."
-    daemon_cmd="./app 2>&1 > logs/app.log"
-    $daemon_cmd & 
+    export PROOF_KEY_PEM=`cat proof_key_pem`
+    export JWT_FB_KEY=`cat rsa.key`
+    export PROOF_KEY=`cat proof_key`
+    export SEAL_KEY=`cat seal_key`
+    export PROOF_PUB_KEY=`cat proof_pub_key_pem`
+    exec ./app 2>&1 > logs/app.log &
     echo $! > $pid_file
 }
 
@@ -24,7 +28,7 @@ stop() {
 status() {
     if [ -f $pid_file ]; then
         pid=$(cat $pid_file)
-        if ps -p $pid > /dev/null; then
+        if ps -p $pid -o comm= | grep  -q "^app$"; then
             echo "$process_name is running with PID $pid"
             return 0
         else

@@ -73,30 +73,36 @@ impl ToJsonBytes for InnerAccount {}
 pub struct InnerAccount {
     #[serde(skip_serializing)]
     pub account: String,
+    pub email: String,
     pub id_type: IdType,
     pub acc_hash: Option<String>,
     pub acc_and_type_hash: Option<String>,
     pub acc_seal: Option<String>,
+    pub email_seal: Option<String>,
 }
 
 impl InnerAccount {
     pub fn default() -> Self {
         Self {
             account: "".to_string(),
+            email: "".to_string(),
             id_type: IdType::Mailto,
             acc_hash: None,
             acc_and_type_hash: None,
             acc_seal: None,
+            email_seal: None,
         }
     }
 
-    pub fn build(account: String, id_type: IdType) -> Self {
+    pub fn build(account: String, id_type: IdType, email: String) -> Self {
         Self {
             account: account,
+            email: email,
             id_type: id_type,
             acc_hash: None,
             acc_and_type_hash: None,
             acc_seal: None,
+            email_seal: None,
         }
     }
     pub fn seal_and_hash(&mut self, seal_key: &str) -> Result<(), err::Error> {
@@ -110,6 +116,15 @@ impl InnerAccount {
             }
         };
         self.acc_seal = Some(encode_hex(&sealed));
+        let sealed_email_r = i_seal(self.email.as_bytes(), seal_key);
+        let sealed_email = match sealed_email_r {
+            Ok(r) => r,
+            Err(_) => {
+                error("seal account failed");
+                return Err(err::Error::new(err::ErrorKind::SgxError));
+            }
+        };
+        self.email_seal = Some(encode_hex(&sealed_email));
         let raw_hashed = signer::eth_hash(self.account.as_bytes());
         self.acc_hash = Some(encode_hex(&raw_hashed));
         let id_type = self.id_type.to_string();
