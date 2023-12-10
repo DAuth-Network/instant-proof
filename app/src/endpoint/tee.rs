@@ -255,7 +255,12 @@ impl TeeAuth for TeeService {
         if error_code == 255 {
             info!("confirm otp successfully");
             let account_slice = &account_b[0..account_b_size];
-            let account = serde_json::from_slice(account_slice).unwrap();
+            let account_r = serde_json::from_slice(account_slice);
+            if account_r.is_err() {
+                error!("deserialize account from tee failed");
+                return Err(Error::new(ErrorKind::SgxError));
+            }
+            let account = account_r.unwrap();
             let dauth_slice = &cipher_dauth[0..cipher_dauth_size];
             return Ok(AuthOut {
                 account,
