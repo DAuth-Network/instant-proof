@@ -5,12 +5,13 @@ pid_file="./$process_name.pid"
 
 start() {
     echo "Starting $process_name..."
+    source /opt/intel/sgxsdk/sgxsdk/environment
     export PROOF_KEY_PEM=`cat proof_key_pem`
     export JWT_FB_KEY=`cat rsa.key`
     export PROOF_KEY=`cat proof_key`
     export SEAL_KEY=`cat seal_key`
     export PROOF_PUB_KEY=`cat proof_pub_key_pem`
-    exec ./app 2>&1 > logs/app.log &
+    exec ./app >logs/app_err.log 2> logs/app.log &
     echo $! > $pid_file
 }
 
@@ -47,7 +48,7 @@ start_if_not() {
     if [ $? -eq 3 ]; then
         echo "process is down, restart it"
         start
-    fi 
+    fi
 }
 
 case "$1" in
