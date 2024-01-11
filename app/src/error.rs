@@ -1,3 +1,6 @@
+/*
+This file describe all Errors that might happen inside dauth api.
+ */
 use std::error;
 use std::fmt;
 

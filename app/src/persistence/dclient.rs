@@ -1,8 +1,14 @@
+/*
+This file contains the data access layer for the client table.
+The client table contains the information about the clients that
+are allowed to use the authentication service.
+Client can also send thei own email template when using otp authentication.
+*/
+
 use super::*;
 use mysql::prelude::*;
 use mysql::*;
 use serde_derive::Serialize;
-use time::PrimitiveDateTime;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Client {

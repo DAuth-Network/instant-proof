@@ -1,9 +1,14 @@
-use std::future::{ready, Ready};
+/*
+This file describe an authentication middleware for dauth api server.
+The functionality is currently moved to tee, so this function is not used any more.
+ */
+
 use actix_web::body::EitherBody;
 use actix_web::dev::{self, ServiceRequest, ServiceResponse};
 use actix_web::dev::{Service, Transform};
 use actix_web::{web, Error, HttpResponse};
 use futures_util::future::LocalBoxFuture;
+use std::future::{ready, Ready};
 
 pub struct VerifyToken;
 
@@ -31,7 +36,7 @@ pub struct VerifyTokenMiddleware<S> {
     service: S,
 }
 
-/// Middleware runs for every request, 
+/// Middleware runs for every request,
 /// for images and js file, bypass middleware check
 /// for requests before authenticate, bypass middleware check
 /// for everything else, if request doesn't include a valid Authorization header,
@@ -52,10 +57,11 @@ where
         println!("middleware is verifying token.");
         println!("getting path {}", request.path());
 
-        if !request.path().starts_with("/ks/") ||
-            request.path() == "/ks/auth" || 
-            request.path() == "/ks/oauth" ||
-            request.path() == "/ks/auth_confirm" {
+        if !request.path().starts_with("/ks/")
+            || request.path() == "/ks/auth"
+            || request.path() == "/ks/oauth"
+            || request.path() == "/ks/auth_confirm"
+        {
             println!("path that doesn't require token");
             let res = self.service.call(request);
             return Box::pin(async move {
@@ -82,5 +88,3 @@ where
         Box::pin(async { Ok(ServiceResponse::new(request, response)) })
     }
 }
-
-

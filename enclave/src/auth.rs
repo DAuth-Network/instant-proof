@@ -1,3 +1,19 @@
+/*
+This file defines auth service interface and implementation.
+  - send_otp
+    - when user request send opt with id_type, mailto or sms,
+    - dauth generates a random 6 digits code and send to user's email or sms
+  - auth_in_one
+    - when user request auth_in_one with id_type and code,
+    - when id_type is sms or mailto, auth compares with previous code,
+        - if equal, auth success, else auth failed
+    - when id_type is others, auth will go through oauth process
+        - send oauth code to oauth server for verification
+  - send_otp_v1
+    - backward compatible with v1.1
+  - auth_in_one_v1
+    - backward compatible with v1.1
+ */
 use super::err::*;
 use super::log::*;
 use super::model::*;

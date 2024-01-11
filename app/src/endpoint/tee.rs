@@ -1,3 +1,17 @@
+/*
+This file is the tee service wrapper for dauth api service.
+- exchange_key
+  - to exchange public key between tee and user browser/mobile
+- send_otp
+  - to ask tee to initial an otp code send to user's email or mobile
+- send_otp_v1
+  - to backward compatible to api v1.1
+- auth_in_one
+  - to ask tee to verify otp code or verify oauth code and return user's account info
+- auth_in_one_v1
+  - to backward compatible to api v1.1
+ */
+
 extern crate sgx_types;
 extern crate sgx_urts;
 

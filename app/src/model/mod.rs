@@ -1,3 +1,8 @@
+/*
+This file describe data models used inside dauth api server.
+Including Account and Auth.
+ */
+
 use crate::endpoint::utils;
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;

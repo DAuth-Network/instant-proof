@@ -1,20 +1,22 @@
 /*
-    Session keeps user session_id and shared_key
-    Sessions keeps the whole table of session_id -> share key
+This file defines the session struct and its methods.
+  - Session keeps user session_id, shared_key, and otp code
+  - Sessions keeps the whole table of session_id -> {shared_key, and otp_code}
 */
-
-use sgx_types::*;
-use std::collections::HashMap;
-use std::convert::TryInto;
-use std::fmt;
-use std::prelude::v1::*;
-use std::vec::Vec;
 
 use super::err::*;
 use super::log::*;
 use super::model::*;
 use super::os_utils;
 use super::sgx_utils;
+use sgx_tcrypto::*;
+use sgx_types::*;
+use sgx_types::*;
+use std::collections::HashMap;
+use std::convert::TryInto;
+use std::fmt;
+use std::prelude::v1::*;
+use std::vec::Vec;
 
 /// User state includes a Map
 /// which stores user account -> confirm code mapping
@@ -30,8 +32,8 @@ pub struct Session {
 impl Session {
     pub fn new(session_id: String, shr_k: [u8; 16]) -> Self {
         Self {
-            shr_k: shr_k,
-            session_id: session_id,
+            shr_k,
+            session_id,
             code: "".to_string(),
             data: InnerAccount::default(),
             register_time: os_utils::system_time(),
@@ -70,7 +72,7 @@ impl Sessions {
     pub fn new(prv_k: sgx_ec256_private_t) -> Self {
         Self {
             state: HashMap::new(),
-            prv_k: prv_k,
+            prv_k,
         }
     }
 
@@ -82,7 +84,7 @@ impl Sessions {
             info(&format!("user pub key gen share key fail {}", err));
             return [0; 32];
         }
-        let mut shr_k_reverse = shr_k_result.unwrap().clone();
+        let mut shr_k_reverse = shr_k_result.unwrap();
         shr_k_reverse.reverse();
         info(&format!("user share key {:?}", shr_k_reverse));
         let sha_result = sgx_utils::sha256(&user_pub_k);
@@ -94,7 +96,7 @@ impl Sessions {
         let sha_str = os_utils::encode_hex(&sha);
         let session = Session::new(sha_str.clone(), shr_k_reverse[16..].try_into().unwrap());
         self.state.insert(sha_str, session);
-        return sha;
+        sha
     }
 
     pub fn close_session(&mut self, session_id: &str) {
@@ -112,5 +114,63 @@ impl Sessions {
 
     pub fn update_session(&mut self, k: &str, v: &Session) {
         self.state.insert(k.to_string(), v.clone());
+    }
+}
+
+/// The following are for unit tests
+pub fn test_session_register() {
+    let ecc_handle = SgxEccHandle::new();
+    let _result = ecc_handle.open();
+    let (prv_k, pub_k) = ecc_handle.create_key_pair().unwrap();
+    let (prv_k1, pub_k1) = ecc_handle.create_key_pair().unwrap();
+    let mut sessions = Sessions::new(prv_k);
+    let session_id = sessions.register_session(sgx_utils::key_to_bigendian(&pub_k));
+    let session_id_str = os_utils::encode_hex(&session_id);
+    let session = sessions.get_session(&session_id_str);
+    match session {
+        None => assert!(false),
+        Some(_) => assert!(true),
+    }
+}
+
+pub fn test_session_register_invalid() {
+    let ecc_handle = SgxEccHandle::new();
+    let _result = ecc_handle.open();
+    let (prv_k, pub_k) = ecc_handle.create_key_pair().unwrap();
+    let mut sessions = Sessions::new(prv_k);
+    let invalid_key = [1_u8; 64];
+    let empty_session_id = sessions.register_session(invalid_key);
+    let expected_session_id = [0_u8; 32];
+    assert_eq!(empty_session_id, expected_session_id);
+}
+
+pub fn test_session_update() {
+    let ecc_handle = SgxEccHandle::new();
+    let _result = ecc_handle.open();
+    let (prv_k, pub_k) = ecc_handle.create_key_pair().unwrap();
+    let (prv_k1, pub_k1) = ecc_handle.create_key_pair().unwrap();
+    let mut sessions = Sessions::new(prv_k);
+    let session_id = sessions.register_session(sgx_utils::key_to_bigendian(&pub_k));
+    let session_id_str = os_utils::encode_hex(&session_id);
+    let mut session = sessions.get_session(&session_id_str).unwrap();
+    session.code = "abc".to_string();
+    sessions.update_session(&session_id_str, &session);
+    let session2 = sessions.get_session(&session_id_str).unwrap();
+    assert_eq!(session.code, session2.code);
+}
+
+pub fn test_session_close() {
+    let ecc_handle = SgxEccHandle::new();
+    let _result = ecc_handle.open();
+    let (prv_k, pub_k) = ecc_handle.create_key_pair().unwrap();
+    let (prv_k1, pub_k1) = ecc_handle.create_key_pair().unwrap();
+    let mut sessions = Sessions::new(prv_k);
+    let session_id = sessions.register_session(sgx_utils::key_to_bigendian(&pub_k));
+    let session_id_str = os_utils::encode_hex(&session_id);
+    sessions.close_session(&session_id_str);
+    let session3 = sessions.get_session(&session_id_str);
+    match session3 {
+        None => {}
+        Some(_) => assert!(false),
     }
 }

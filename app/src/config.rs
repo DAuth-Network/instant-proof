@@ -1,3 +1,9 @@
+/*
+This file describes configuration for api server to start and run.
+DAuthConfig is the overall config that from config file and env vars.
+TeeConfig is for the config inside tee.
+ */
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

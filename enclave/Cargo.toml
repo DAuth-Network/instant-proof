@@ -1,7 +1,9 @@
 [package]
 name = "enclave"
-version = "1.0.0"
-authors = ["The Teaclave Authors"]
+version = "0.0.1"
+authors = ["ksdev2023@hotmail.com"]
+edition = "2021"
+license = "Apache-2.0 license"
 
 [lib]
 name = "enclave"
@@ -17,6 +19,7 @@ sgx_trts = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tcrypto = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_tseal = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 sgx_rand = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+sgx_tunittest = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
 
 [dependencies]
 serde = { git = "https://github.com/mesalock-linux/serde-sgx.git", features = ["derive"] }

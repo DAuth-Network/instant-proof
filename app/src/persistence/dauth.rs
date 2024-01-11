@@ -1,3 +1,10 @@
+/*
+This file is for the data access layer for the account table and auth table.
+Inside account table, records all user related information, all user sensitive information are sealed.
+Each user will have one and only one account.
+Inside auth table, each record indicates one user authentication activity.
+ */
+
 use super::*;
 use crate::model::*;
 use mysql::prelude::*;
@@ -5,11 +12,11 @@ use mysql::*;
 use std::str::FromStr;
 
 pub fn insert_account_if_new(pool: &Pool, account: &Account) -> GenericResult<()> {
-    let existing_account = query_account(pool, &account)?;
+    let existing_account = query_account(pool, account)?;
     if !existing_account.is_empty() {
         return Ok(());
     }
-    insert_account(pool, &account)?;
+    insert_account(pool, account)?;
     Ok(())
 }
 

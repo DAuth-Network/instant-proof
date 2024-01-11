@@ -1,3 +1,17 @@
+/*
+This file describes all tee ecall entrance, including:
+- ec_exchange_key
+    - collect user public key to generate a shared key and save in user session
+- ec_set_conf
+    - set tee config passing from app
+- ec_send_otp
+    - send otp code to user email or phone
+- ec_auth_in_one
+    - auth in one step
+- ec_auth_in_one_v1
+    - backward compatible with v1.1
+*/
+
 #![crate_name = "enclave"]
 #![crate_type = "staticlib"]
 #![cfg_attr(not(target_env = "sgx"), no_std)]
@@ -12,6 +26,8 @@ extern crate tiny_keccak;
 #[cfg(not(target_env = "sgx"))]
 #[macro_use]
 extern crate sgx_tstd as std;
+#[macro_use]
+extern crate sgx_tunittest;
 extern crate base64;
 extern crate bip32;
 extern crate http_req;
@@ -39,8 +55,10 @@ use std::sync::{Once, SgxMutex};
 //use std::backtrace::{self, PrintFormat};
 // use std::prelude::v1::*;
 use bip32::{Prefix, XPrv};
+use sgx_tunittest::*;
 use std::ptr;
 use std::str;
+use std::vec::Vec;
 
 pub mod auth;
 pub mod config;
@@ -60,7 +78,9 @@ use self::model::*;
 use self::session::*;
 use libsecp256k1::{PublicKey, SecretKey};
 use oauth::*;
-use signer::SignerAgent;
+use os_utils::*;
+use sgx_utils::*;
+use signer::*;
 
 // EnclaveState includes session state that constatntly changes
 struct EnclaveState {
@@ -463,12 +483,29 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 #[no_mangle]
 pub extern "C" fn ec_test() -> sgx_status_t {
     println!("running ec_test");
-    let s = decode_hex("3ddd5602285899a946114506157c7997e5444528f3003f6134712147db19b678").unwrap();
-    //let dk1 = derive_xprv(&s, "m/0/2147483647'/1/2147483646'");
-    //let dk2 = derive_xprv(&s, "m/0/eee'/1/bbb123'");
-    //println!("dk1 {:?}", &*dk1.to_string(Prefix::XPRV));
-    //print!("dk2 {}", &*dk2.to_string(Prefix::XPRV));
-
+    rsgx_unit_tests!(
+        test_eth_message,
+        test_encode_hex,
+        test_decode_hex,
+        test_decode_hex_with_spaces,
+        test_decode_hex_with_invalid_characters,
+        test_session_register,
+        test_session_register_invalid,
+        test_session_update,
+        test_session_close,
+        test_inner_account_default,
+        test_inner_account_build,
+        test_pub_k_from_user,
+        test_as_u32_be_with_valid_input,
+        test_as_u32_be_with_all_zero_input,
+        test_as_u32_be_with_all_one_input,
+        test_rand,
+        test_as_u32_le_with_valid_input,
+        test_as_u32_le_with_all_zero_input,
+        test_as_u32_le_with_all_one_input,
+        test_encrypt_decrypt,
+        test_encrypt_decrypt_invalid
+    );
     sgx_status_t::SGX_SUCCESS
 }
 

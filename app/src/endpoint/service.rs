@@ -1,3 +1,9 @@
+/*
+This file describes api version 2, including:
+- send_otp
+- auth_in_one
+ */
+
 extern crate openssl;
 #[macro_use]
 use std::str;

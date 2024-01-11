@@ -1,9 +1,10 @@
 [package]
 name = "app"
-version = "1.0.0"
-authors = ["The Teaclave Authors"]
+version = "0.0.1"
+authors = ["ksdev2023@hotmail.com"]
 build = "build.rs"
 edition = "2021"
+license = "Apache-2.0 license"
 
 
 [dependencies]

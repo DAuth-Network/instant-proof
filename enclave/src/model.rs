@@ -166,3 +166,16 @@ pub struct AuthInV1 {
     pub user_key: Option<String>,
     pub user_key_signature: Option<String>,
 }
+
+/// The following are for unit tests
+pub fn test_inner_account_default() {
+    let account = InnerAccount::default();
+    assert_eq!(account.account, "".to_string());
+    assert_eq!(account.id_type, IdType::Mailto);
+}
+
+pub fn test_inner_account_build() {
+    let account = InnerAccount::build("abc".to_string(), IdType::Google);
+    assert_eq!(account.account, "abc".to_string());
+    assert_eq!(account.id_type, IdType::Google);
+}

@@ -1,3 +1,11 @@
+/*
+This file describes tee configs, including:
+- otp channel config
+    - channel account and password
+- oauth config
+    - oauth provider provided client_id and client_secret
+ */
+
 extern crate serde;
 use serde::{Deserialize, Serialize};
 use std::fmt::*;

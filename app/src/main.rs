@@ -1,3 +1,17 @@
+/*
+This file is the entrance for dauth api server based on actix-web server.
+After compiling, the server compiles to an app file located in bin.
+
+When running, the server:
+- first loads log config file,
+- then loads the config file for dauth api server,
+- then it looks for environment variables including signing private keys and public keys and sealing key,
+- then it creates a database connection pool,
+- then it creates an enclave instance,
+- then it creates a thread pool to control concurrent enclave execution,
+- then it starts the http server as an api server.
+ */
+
 extern crate openssl;
 #[macro_use]
 extern crate log;
@@ -5,6 +19,7 @@ extern crate config as config_file;
 extern crate log4rs;
 
 use std::env;
+use std::process::exit;
 use std::str;
 
 use actix_cors::Cors;
@@ -33,8 +48,6 @@ use endpoint::service_v1;
 use endpoint::tee::*;
 use ocall::*;
 use persistence::dclient::*;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 static ENCLAVE_FILE: &'static str = "enclave.signed.so";
 
@@ -58,17 +71,33 @@ fn init_enclave() -> SgxEnclave {
     match sgx_result {
         Ok(r) => {
             info!("Init Enclave Successful {}!", r.geteid());
-            return r;
+            r
         }
         Err(x) => {
             error!("Init Enclave Failed {}!", x.as_str());
             panic!("Init Enclave Failed, exiting");
         }
-    };
+    }
 }
 
-/// Create enclave instance and generate key pairs inside tee
-/// for secure communication
+/// Create enclave instance and run all unit tests inside
+fn init_enclave_and_run_tests() {
+    let enclave = init_enclave();
+    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
+    unsafe {
+        ecall::ec_test(enclave.geteid(), &mut sgx_result);
+    };
+    match sgx_result {
+        sgx_status_t::SGX_SUCCESS => {
+            println!("execute tests in enclave done.");
+        }
+        _ => {
+            println!("execute tests in enclave failed!");
+        }
+    }
+}
+
+/// Create enclave instance and set config inside enclave
 fn init_enclave_and_set_conf(conf: config::TeeConfig) -> SgxEnclave {
     let enclave = init_enclave();
     let mut sgx_result = sgx_status_t::SGX_SUCCESS;
@@ -89,42 +118,11 @@ fn init_enclave_and_set_conf(conf: config::TeeConfig) -> SgxEnclave {
         }
         _ => panic!("Enclave generate key-pair failed!"),
     }
-    return enclave;
+    enclave
 }
-
-/// Create enclave instance and generate key pairs inside tee
-/// for secure communication
-/*
-fn get_rsa_pub_key(enclave: SgxEnclave) -> Result<String> {
-    let mut sgx_result = sgx_status_t::SGX_SUCCESS;
-    let mut rsa_pub_key = [0u8; 2048];
-    let result = unsafe {
-        ecall::ec_get_sign_pub_key(
-            enclave.geteid(),
-            &mut sgx_result,
-            &mut rsa_pub_key,
-            rsa_pub_key_size
-        );
-    };
-    match result {
-        sgx_status_t::SGX_SUCCESS => {
-            println!("set config in sgx done.");
-        },
-        _ => panic!("Enclave generate key-pair failed!")
-    }
-    return enclave;
-}
-*/
 
 fn parse_pem(pem_pub_key: &str) -> PublicKey {
     pem_pub_key.parse::<p256::PublicKey>().unwrap()
-}
-
-fn bytes_to_pem(hex_key: &str) -> String {
-    let bytes_key = hex::decode(hex_key).unwrap();
-    let sk = SecretKey::from_slice(&bytes_key).unwrap();
-    let sk_pem = sk.to_sec1_pem(Default::default()).unwrap();
-    sk_pem.to_string()
 }
 
 /// Create database connection pool using conf from config file
@@ -139,11 +137,10 @@ fn init_db_pool(conf: &config::DbConfig) -> Pool {
         db_user, db_password, db_host, db_port, db_name
     );
     let ops = Opts::from_url(&db_url).unwrap();
-    let pool = mysql::Pool::new(ops).unwrap();
-    return pool;
+    mysql::Pool::new(ops).unwrap()
 }
 
-/// Read config file and save config to hash map
+/// Read config file and parse to DauthConfig
 fn load_conf(fname: &str) -> config::DauthConfig {
     let mut conf = Config::builder()
         .add_source(File::with_name(fname))
@@ -163,16 +160,28 @@ fn load_conf(fname: &str) -> config::DauthConfig {
 async fn main() -> std::io::Result<()> {
     log4rs::init_file("log4rs.yml", Default::default()).unwrap();
     info!("logging!");
+    let args = env::args();
+    if args.count() == 2 {
+        // when extra args are passed, run unit tests
+        info!("running unit test ");
+        init_enclave_and_run_tests();
+        exit(0);
+    }
+    // all signing and sealing key are stored in env
     let conf = load_conf("conf");
     let workers: usize = conf.api.workers.try_into().unwrap();
+    // create a threadpool for enclave concurrent executing
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(workers)
         .build()
         .unwrap();
-    // edata stores environment and config information
+    // create a db pool for query and save user auth records
     let client_db = init_db_pool(&conf.db.client);
+    // create an enclave instance and set config inside
     let enclave = init_enclave_and_set_conf(conf.to_tee_config(env::var("SEAL_KEY").unwrap()));
+    // parse signing public key from env
     let jwt_pub_key = parse_pem(&env::var("PROOF_PUB_KEY").unwrap());
+    // app level state, including db_pool and enclave instance
     let edata: web::Data<service::AppState> = web::Data::new(service::AppState {
         tee: TeeService::new(enclave, pool),
         jwt_pub_key,
@@ -191,9 +200,14 @@ async fn main() -> std::io::Result<()> {
         .set_certificate_chain_file("certs/MyCertificate.crt")
         .unwrap();
 
+    // subpath is for api versioning, e.g.
+    // /dauth/v1.1 indicates api version 1.1
+    // /dauth/v2 for api version 2
     let subpath = conf.api.prefix;
     let subpath_v1 = format!("{}/v1.1", subpath);
     let subpath_v2 = format!("{}/v2", subpath);
+
+    // create http server
     let server = HttpServer::new(move || {
         let cors = Cors::permissive();
         let app = App::new()
@@ -226,7 +240,7 @@ async fn main() -> std::io::Result<()> {
         }
     })
     .workers(workers);
-    // uncomment to enable https
+    // protocol could be either http or https
     let protocol = conf.api.protocol;
     if protocol.eq("https") {
         let server_url = format!("{}:{}", &conf.api.host, &conf.api.port);
