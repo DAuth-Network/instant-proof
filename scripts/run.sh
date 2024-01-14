@@ -5,7 +5,7 @@ pid_file="./$process_name.pid"
 
 start() {
     echo "Starting $process_name..."
-    source /opt/intel/sgxsdk/sgxsdk/environment
+    source /opt/sgxsdk/environment
     export PROOF_KEY_PEM=`cat proof_key_pem`
     export JWT_FB_KEY=`cat rsa.key`
     export PROOF_KEY=`cat proof_key`
