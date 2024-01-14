@@ -51,9 +51,10 @@ create table client (
 ROW_FORMAT=COMPRESSED
 CHARACTER set = utf8mb4;
 
+insert into client (client_name, client_origin, client_id, client_secret_hash, client_redirect_url) values("demo", "http://localhost:8080", "demo", "demo", "http://localhost:8080");
 
-drop user 'duadmin'@'localhost';
-drop user 'duadmin';
+drop user if exists 'duadmin'@'localhost';
+drop user if exists 'duadmin';
 flush privileges;
 create user 'duadmin'@'localhost' identified by 'ks123';
 create user 'duadmin'@'%' identified by 'ks123';
@@ -63,9 +64,11 @@ grant all on dclient.* to 'duadmin'@'localhost';
 grant all on dclient.* to 'duadmin'@'%';
 flush privileges;
 
-
+drop user if exists 'dcadmin'@'localhost';
+drop user if exists 'dcadmin';
 create user 'dcadmin'@'localhost' identified by 'ks123';
 create user 'dcadmin'@'%' identified by 'ks123';
-grant all on dclient.* to 'duadmin'@'localhost';
-grant all on dclient.* to 'duadmin'@'%';
+grant all on dclient.* to 'dcadmin'@'localhost';
+grant all on dclient.* to 'dcadmin'@'%';
 flush privileges;
+
