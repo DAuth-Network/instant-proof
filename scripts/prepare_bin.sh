@@ -1,6 +1,6 @@
 #!/bin/bash
 
-mkdir certs
+mkdir -p certs
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -nodes -sha256 -nodes -days 365
 mv cert.pem certs/MyCertificate.crt
 mv key.pem certs/MyKey.key 
@@ -14,4 +14,4 @@ cp ../scripts/proof_key_pem .
 cp ../scripts/seal_key .
 cp ../scripts/rsa.key .
 cp ../scripts/proof_pub_key_pem .
-mkdir logs 
+mkdir -p logs 
