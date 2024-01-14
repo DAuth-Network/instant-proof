@@ -64,13 +64,14 @@
 ```
 + inside docker instance, run unit test
 ```
-  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/bin; ./app test
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/bin
+  ../scripts/prepare_bin.sh
+  ./app test
 ```
 + inside docker instance, prepare environment before start up
 ```
-  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/bin;
-  ../scripts/prepare_bin.sh
-  ./start.sh
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/bin
+  ./run.sh start
 ```
 + start service, once started, ./app stucks waiting for requests
 + start front-end 
