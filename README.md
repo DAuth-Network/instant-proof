@@ -32,12 +32,18 @@
 ```
 ## setup with docker
 + install docker
-+ build mysql db docker instance 
++ get source code
+```
+  git clone https://github.com/DAuth-Network/instant-proof.git
+  cd instant-proof
+  **git checkout polka-grant**
+```
++ build mysql db docker instance
 ```
   docker pull mysql:latest 
   docker run --name ip-db -p 12345:3306 -v $PWD/data:/var/lib/mysql -v $PWD/schema:/root/schema/ -e MYSQL_ROOT_PASSWORD=ks123 -d mysql:latest
 ```
-+ login mysql docker instance to setup db 
++ login mysql docker instance to setup db, talbe, and admin
 ```
   docker exec -it ip-db bash
   # paste the content of app/schema.sql, use ctrl-d to exit
@@ -46,18 +52,14 @@
 ```
 + build instant-proof docker instance
 ```
-  git clone https://github.com/DAuth-Network/instant-proof.git
-  cd instant-proof
-  **git checkout polkadot**
   cd docker
   docker build -t ip01 -f Dockerfile .
   cd ..
-  docker run --network host -v ${PWD}:/root/incubator-teaclave-sgx-sdk/samplecode/keysafe-app -ti ip01
+  docker run --network host -v ${PWD}:/root/incubator-teaclave-sgx-sdk/samplecode/instant-proof -ti ip01
 ```
 + inside docker instance, build package
 ```
-  bash /root/get_ks_sgx.sh
-  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/;
+  cd /root/incubator-teaclave-sgx-sdk/samplecode/instant-proof/
   make SGX_MODE=SW 
 ```
 + inside docker instance, run unit test
@@ -71,10 +73,6 @@
   ./start.sh
 ```
 + start service, once started, ./app stucks waiting for requests
-```
-  export KS_ACCOUNT="zone envelope fish dolphin cup conduct burden tomato uphold final wood dune"
-  ./app &
-```
 + start front-end 
 ```
   cd <a-new-directory>

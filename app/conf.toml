@@ -24,14 +24,14 @@ host = "127.0.0.1"
 user = "ksadmin"
 password = "ks123"
 port = 12345
-name = "keysafe"
+name = "dapi_ip"
 
 [db.client]
 host = "127.0.0.1"
 user = "ksadmin"
 password = "ks123"
 port = 12345
-name = "keysafe"
+name = "dclient"
 
 [oauth.google]
 client_id = ""

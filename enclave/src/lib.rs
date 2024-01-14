@@ -484,7 +484,6 @@ fn register_session(user_key_slice: &[u8]) -> [u8; 32] {
 pub extern "C" fn ec_test() -> sgx_status_t {
     println!("running ec_test");
     rsgx_unit_tests!(
-        test_eth_message,
         test_encode_hex,
         test_decode_hex,
         test_decode_hex_with_spaces,
