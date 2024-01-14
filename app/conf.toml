@@ -1,37 +1,55 @@
+[signer.jwt]
+signer = 'dauth.network'
+signing_key = 'dummy'
+
+[signer.jwt_fb]
+signer = ''
+signing_key = 'dummy'
+
+[signer.proof]
+signer = "dauth.network"
+signing_key = 'dummy'
+
 [api]
 port = 30000
 protocol = "http"
 prefix = "/dauth/sdk"
-env = "dev"
+env = "DEV"
 host = "127.0.0.1"
 workers = 16
 
+[otp.email_api]
+account = "token"
+password = "Bearer token123"
+server = "https://api.sendgrid.com/v3/mail/send"
+sender = "verify@dauth.network"
 
-[otpchannel.email]
-account = "verify@keysafe.network"
+[otp.email]
+account = ""
 password = ""
-server = ""
-sender = ""
+server = "smtp.sendgrid.net"
+sender = "verify@dauth.network"
 
-[otpchannel.sms]
+[otp.sms]
 account = "verify@keysafe.network"
 password = ""
 server = ""
 sender = ""
 
 [db.auth]
-host = "127.0.0.1"
-user = "ksadmin"
+host = "localhost"
+user = "duadmin"
 password = "ks123"
 port = 12345
 name = "dapi_ip"
 
 [db.client]
-host = "127.0.0.1"
-user = "ksadmin"
+host = "localhost"
+user = "dcadmin"
 password = "ks123"
 port = 12345
 name = "dclient"
+
 
 [oauth.google]
 client_id = ""
@@ -39,6 +57,16 @@ client_secret = ""
 redirect_url = ""
 
 [oauth.github]
+client_id = ""
+client_secret = ""
+redirect_url = ""
+
+[oauth.apple]
+client_id = ""
+client_secret = ""
+redirect_url = ""
+
+[oauth.twitter]
 client_id = ""
 client_secret = ""
 redirect_url = ""
