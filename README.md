@@ -32,6 +32,7 @@
 ```
 ## setup with docker
 + install docker
++ Be aware that docker image with sgx features does not work on Apple M1/M2.
 ### get source code
 ```
   git clone https://github.com/DAuth-Network/instant-proof.git
