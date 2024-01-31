@@ -1,3 +1,14 @@
+/*
+This file describes all oauth related functions.
+Currently it is supporting Google, Github, Apple and Twitter.
+For each oauth to work, one must register an app with the corresponding oauth provider.
+And set the oauth client_id and client_secret in the config file, and pass inside enclave while startup.
+For each oauth flow, it is almost the same:
+    - get the oauth code from user,
+    - use the oauth code to get the oauth access token,
+    - use the oauth access token to get the user profile,
+    - parse user profile to get and verify user account
+*/
 use super::config::OAuthConf;
 use super::err::*;
 use super::log::*;

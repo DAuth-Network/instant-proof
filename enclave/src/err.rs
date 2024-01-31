@@ -1,3 +1,31 @@
+/*
+This file describes all ErrorKinds that could happen during an authentication:
+- ErrorKind::ClientError => 0,
+    Each client that is using dauth sdk will be assigned an client id.
+    For testing purpose, an client_id demo will be assigned.
+    If the client_id is empty, this error will be returned.
+    This error doesn't happen inside sgx.
+- ErrorKind::DecryptError => 1,
+    When decryption data is invalid, this error will be returned.
+- ErrorKind::SendChannelError => 2,
+    When sending otp code to user failed, this error will be returned.
+- ErrorKind::OAuthCodeError => 3,
+    When exchanging oauth code failed, this error will be returned.
+- ErrorKind::OAuthProfileError => 4,
+    When getting oauth profile failed, this error will be returned.
+- ErrorKind::SessionError => 5,
+    When session is expired or not found, this error will be returned.
+- ErrorKind::DataError => 6,
+    DataError is a general error, when serializing or deserializing json, encrypt data, fails,
+    this error will be returned.
+- ErrorKind::SgxError => 7,
+    SgxError is a general error, when sgx fails, this error will be returned.
+- ErrorKind::DbError => 8,
+    DbError is a general error, when insert or query db fails, this error will be returned.
+    This doesn't happen inside sgx.
+- ErrorKind::OtpCodeError => 9,
+    When otp code mismatch, this error will be returned.
+ */
 use std::boxed::Box;
 use std::error;
 use std::fmt;

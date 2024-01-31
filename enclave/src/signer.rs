@@ -1,3 +1,14 @@
+/*
+This file describes all signing related functions.
+    - sign mode is used to determine which signer to use
+    - sign mode can be jwt, proof, both
+When using sign_mode jwt, we use jwt_signer_agent to sign the jwt token,
+which can be used as an id token for web2 applications.
+When using sign_mode proof, we use proof_signer_agent to sign an eth compatible proof,
+which can be used as an id token for web3 applications.
+When using sign_mode both, we sign the account using both jwt and proof method,
+and returns both.
+ */
 use crate::get_config_seal_key;
 
 use super::config;
@@ -31,6 +42,7 @@ pub fn get_signer(sign_mode: &SignMode) -> &'static dyn SignerAgent {
     }
 }
 
+// JWTFbClaims is used to generate firebase jwt token
 #[derive(Debug, Serialize)]
 pub struct JwtFbClaims {
     alg: String,
@@ -42,6 +54,17 @@ pub struct JwtFbClaims {
     uid: String,
 }
 
+/* JWTClaims is used to generate jwt token
+    - alg: algorithm
+    - sub: subject, account hash
+    - acc_and_type_hash: account and type hash
+    - idtype: id type, could be email/sms/google
+    - iss: issuer, could be dauth.network
+    - aud: audience, could be client id or client origin
+    - iat: issued at certain datetime
+    - exp: expired at certain datetime
+
+*/
 #[derive(Debug, Serialize)]
 pub struct JwtClaims {
     alg: String,
@@ -358,6 +381,13 @@ impl SignerAgent for JwtFbSignerAgent {
     }
 }
 
+/*
+This function is used to sign a proof/web3 compatible message.
+Usually, we use the configured private key to sign the message to get the proof.
+But client could pass in id_key_salt to generate a user private key to sign the message.
+As long as each time id_key_salt is the same for the same user and the same client,
+the user private key will be the same.
+ */
 impl SignerAgent for ProofSignerAgent {
     fn sign(&self, auth: &dyn AuthToSign) -> GenericResult<Vec<u8>> {
         // verify id_key_salt and sign_msg presence

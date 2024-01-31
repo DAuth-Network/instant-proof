@@ -1,3 +1,8 @@
+/*
+This file is an logging proxy,
+it calls oc_log with different log_levels internally.
+ */
+
 extern "C" {
     pub fn oc_log(level: i32, msg: *const u8, msg_len: i32);
 }

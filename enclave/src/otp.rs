@@ -1,3 +1,17 @@
+/*
+This file describes the otp channel function.
+    - otp channel is used to send otp code to user
+    - otp channel can be email, sms, or other channels
+We have 3 channels implemented all using sendgrid:
+    - MailChannelClient
+        sending mail through smtp
+    - MailApiChannelClient
+        sending mail through rest api
+    - SmsChannelClient
+        sending mail through rest api
+Each otp channel message can be customized with template, provided by each client.
+ */
+
 use super::config;
 use super::err::*;
 use super::log::*;

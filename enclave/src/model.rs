@@ -1,3 +1,7 @@
+/*
+This file defines all major data structures used inside enclave.
+Most of the structures are using to encapsulate data from/to outside.
+ */
 extern crate serde;
 use crate::os_utils;
 
@@ -79,6 +83,12 @@ pub struct InnerAccount {
     pub acc_seal: Option<String>,
 }
 
+/*
+InnerAccount is used to store account information inside enclave.
+account could either be a sms_number, or email address or oauth account id.
+acc_and_type_hash is used as an identifier for account.
+acc_seal is used to store the sealed account, unseal for future use.
+ */
 impl InnerAccount {
     pub fn default() -> Self {
         Self {
